@@ -11,9 +11,15 @@ BUNDLE_ID="com.yourapp.YourApp"
 echo "Cleaning old build artifacts..."
 rm -rf build/
 
-# 编译多架构二进制
+# 编译多架构二进制（在部分环境可能只支持单架构，这里统一处理）
 echo "Building multi-architecture binary..."
-swift build -c release --arch arm64 --arch x86_64
+swift build -c release --arch arm64 --arch x86_64 || {
+    echo "Multi-arch build failed, trying single-arch release build..."
+    swift build -c release || {
+        echo "❌ Swift build failed"
+        exit 1
+    }
+}
 
 # 创建 .app 目录结构
 echo "Creating .app bundle structure..."
@@ -23,7 +29,19 @@ mkdir -p build/$APP_NAME.app/Contents/Resources/scripts
 
 # 复制编译产物
 echo "Copying built executable..."
-cp .build/apple/Products/Release/$APP_NAME build/$APP_NAME.app/Contents/MacOS/
+
+EXEC_SRC=""
+if [ -f ".build/apple/Products/Release/$APP_NAME" ]; then
+    EXEC_SRC=".build/apple/Products/Release/$APP_NAME"
+elif [ -f ".build/release/$APP_NAME" ]; then
+    EXEC_SRC=".build/release/$APP_NAME"
+else
+    echo "❌ Cannot find built executable for $APP_NAME"
+    ls -R .build || true
+    exit 1
+fi
+
+cp "$EXEC_SRC" "build/$APP_NAME.app/Contents/MacOS/$APP_NAME"
 
 # 复制资源文件
 echo "Copying resources..."
@@ -97,9 +115,9 @@ xattr -cr build/$APP_NAME.app 2>/dev/null || {
 # 验证构建
 echo ""
 echo "================================"
-echo "✅ Build successful!"
-echo "================================"
 if [ -f "build/$APP_NAME.app/Contents/MacOS/$APP_NAME" ]; then
+    echo "✅ Build successful!"
+    echo "================================"
     echo "App bundle: build/$APP_NAME.app"
     echo ""
     echo "📦 无证书运行说明:"
@@ -116,6 +134,8 @@ if [ -f "build/$APP_NAME.app/Contents/MacOS/$APP_NAME" ]; then
     echo ""
     echo "🚀 快速测试: open build/$APP_NAME.app"
 else
-    echo "❌ Build failed!"
+    echo "❌ Build failed: app executable not found"
+    echo "Listing bundle contents for debugging:"
+    ls -R build || true
     exit 1
 fi
