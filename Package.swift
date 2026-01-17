@@ -21,9 +21,9 @@ let package = Package(
         .executableTarget(
             name: "YourApp",
             dependencies: [],
-            path: "trae/Sources/YourApp",
+            path: "trae/Sources",
             resources: [
-                .process("../../../Resources")
+                .process("../Resources")
             ]
         )
     ]
