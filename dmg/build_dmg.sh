@@ -22,7 +22,6 @@ if [ ! -d "../build/$APP_NAME.app" ]; then
     exit 1
 fi
 
-# 创建 DMG
 echo "Creating DMG installer..."
 create-dmg \
   --volname "$APP_NAME Installer" \
@@ -32,11 +31,9 @@ create-dmg \
   --hide-extension "$APP_NAME.app" \
   --icon-size 100 \
   --icon "$APP_NAME.app" 100 200 \
-  --background "../trae/Resources/background.png" \
   --text-size 12 \
-  --add-file "../docs/README.md" "README.md" 100 300 \
-  ../build/$APP_NAME.app \
-  .
+  "$APP_NAME.dmg" \
+  ../build/$APP_NAME.app
 
 # 验证 DMG
 echo "Verifying DMG..."
