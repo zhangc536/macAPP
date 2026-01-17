@@ -14,8 +14,8 @@ struct ContentView: View {
         NavigationStack {
             ProjectListView(viewModel: projectViewModel)
                 .navigationTitle("项目管理器")
-                .navigationBarItems(trailing:
-                    HStack {
+                .toolbar {
+                    ToolbarItemGroup(placement: .primaryAction) {
                         Button(action: {
                             editingProject = nil
                             isPresentingProjectEditor = true
@@ -32,7 +32,7 @@ struct ContentView: View {
                             }
                         }
                     }
-                )
+                }
                 .alert(isPresented: $showUpdateAlert) {
                     if let url = updateDownloadURL {
                         return Alert(

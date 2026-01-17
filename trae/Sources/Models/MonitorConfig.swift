@@ -1,6 +1,6 @@
 import Foundation
 
-enum MonitorType: String, CaseIterable {
+enum MonitorType: String, CaseIterable, Codable {
     case log = "log"
     case port = "port"
     case process = "process"
