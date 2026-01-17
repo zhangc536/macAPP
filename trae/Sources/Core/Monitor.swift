@@ -2,22 +2,21 @@ import Foundation
 
 final class Monitor {
     static func openTerminalForProject(_ project: Project) {
-        // 打开终端窗口并切换到项目目录
         let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Monitoring \(project.name) ===\"\"' -e 'activate' -e 'end tell'"
-        ShellRunner.run(command: script, workingDir: nil, onOutput: {}, onExit: { _ in })
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorLog(_ project: Project, logPath: String? = nil) {
         let actualLogPath = logPath ?? project.logPath
         let fullLogPath = "\(project.path)/\(actualLogPath)"
         let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Log Monitoring - \(project.name) ===\"; tail -f \(fullLogPath)\"' -e 'activate' -e 'end tell'"
-        ShellRunner.run(command: script, workingDir: nil, onOutput: {}, onExit: { _ in })
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorPort(_ project: Project, port: Int? = nil) {
         let actualPort = port ?? project.ports.first ?? 0
         let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Port \(actualPort) Monitoring - \(project.name) ===\"; while true; do lsof -i :\(actualPort); sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
-        ShellRunner.run(command: script, workingDir: nil, onOutput: {}, onExit: { _ in })
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorProcess(_ project: Project, pid: Int? = nil) {
@@ -25,7 +24,7 @@ final class Monitor {
             return
         }
         let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Process \(actualPid) Monitoring - \(project.name) ===\"; while true; do ps -p \(actualPid) -o %cpu,%mem,command; sleep 1; clear; done\"' -e 'activate' -e 'end tell'"
-        ShellRunner.run(command: script, workingDir: nil, onOutput: {}, onExit: { _ in })
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorProject(_ project: Project) {
@@ -34,23 +33,23 @@ final class Monitor {
         let logPath = project.logPath
         let fullLogPath = "\(project.path)/\(logPath)"
         
-        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Comprehensive Monitoring - \(project.name) ===\"; while true; do echo \"[\$(date +%H:%M:%S)] Process: \"; if [ -n \"\(project.pid ?? 0)\" ]; then ps -p \(project.pid ?? 0) -o %cpu,%mem,command; else echo \"Not running\"; fi; echo; echo \"Port: \(port): \"; lsof -i :\(port) 2>/dev/null || echo \"Not listening\"; echo; echo \"Recent Logs (last 5 lines): \"; tail -n 5 \(fullLogPath) 2>/dev/null || echo \"Log file not found\"; echo; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
-        ShellRunner.run(command: script, workingDir: nil, onOutput: {}, onExit: { _ in })
+        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Comprehensive Monitoring - \(project.name) ===\"; while true; do echo \"[$(date +%H:%M:%S)] Process: \"; if [ -n \"\(project.pid ?? 0)\" ]; then ps -p \(project.pid ?? 0) -o %cpu,%mem,command; else echo \"Not running\"; fi; echo; echo \"Port: \(port): \"; lsof -i :\(port) 2>/dev/null || echo \"Not listening\"; echo; echo \"Recent Logs (last 5 lines): \"; tail -n 5 \(fullLogPath) 2>/dev/null || echo \"Log file not found\"; echo; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorDirectory(_ project: Project, directory: String = ".") {
         let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Directory Monitoring - \(project.name) ===\"; watch -n 1 ls -la \(directory)\"' -e 'activate' -e 'end tell'"
-        ShellRunner.run(command: script, workingDir: nil, onOutput: {}, onExit: { _ in })
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorNetwork(_ project: Project) {
         let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Network Monitoring - \(project.name) ===\"; while true; do echo \"Listening Ports: \"; netstat -an | grep LISTEN; sleep 3; clear; done\"' -e 'activate' -e 'end tell'"
-        ShellRunner.run(command: script, workingDir: nil, onOutput: {}, onExit: { _ in })
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func customMonitor(_ project: Project, command: String, title: String) {
         let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== \(title) - \(project.name) ===\"; \(command)\"' -e 'activate' -e 'end tell'"
-        ShellRunner.run(command: script, workingDir: nil, onOutput: {}, onExit: { _ in })
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorWithConfig(_ config: MonitorConfig, project: Project) {
@@ -80,7 +79,7 @@ final class Monitor {
     
     static func closeAllTerminals() {
         let script = "osascript -e 'tell application \"Terminal\"' -e 'close every window' -e 'end tell'"
-        ShellRunner.run(command: script, workingDir: nil, onOutput: {}, onExit: { _ in })
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func listRunningProcesses(_ project: Project) -> [String] {

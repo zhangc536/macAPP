@@ -2,9 +2,8 @@ import Foundation
 
 final class ProjectRunner {
     static func run(project: Project, action: String, onLog: @escaping (String) -> Void) {
-        // 首先尝试使用远程脚本URL
         if let scriptUrl = project.scriptUrls?[action] {
-            let command = "bash \u003c(curl -fsSL \(scriptUrl))"
+            let command = "bash <(curl -fsSL \(scriptUrl))"
             
             // 判断是否需要sudo权限
             let needSudo = project.needsSudo?[action] ?? false
@@ -73,9 +72,10 @@ final class ProjectRunner {
         let processes = Monitor.listRunningProcesses(project)
         if !processes.isEmpty {
             status = "running"
-            // 提取PID
             if let firstProcess = processes.first {
-                let parts = firstProcess.components(separatedBy: "\s").filter { !$0.isEmpty }
+                let parts = firstProcess
+                    .components(separatedBy: .whitespaces)
+                    .filter { !$0.isEmpty }
                 if parts.count >= 2, let pid = Int(parts[1]) {
                     updateProjectPid(project: project, pid: pid)
                 }
