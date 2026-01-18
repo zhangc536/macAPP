@@ -117,7 +117,11 @@ struct ContentView: View {
                         isCheckingUpdate: isCheckingUpdate,
                         updateMessage: updateMessage,
                         currentVersion: VersionManager.currentAppVersion(),
-                        onCheck: triggerUpdateCheck
+                        remoteUpdate: remoteUpdate,
+                        onCheck: triggerUpdateCheck,
+                        onInstall: { remote in
+                            beginInstall(remote: remote)
+                        }
                     )
                     .navigationTitle(SidebarItem.updates.title)
                 }
@@ -224,7 +228,9 @@ private struct UpdatesView: View {
     let isCheckingUpdate: Bool
     let updateMessage: String?
     let currentVersion: String
+    let remoteUpdate: Version?
     let onCheck: () -> Void
+    let onInstall: (Version) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -253,6 +259,15 @@ private struct UpdatesView: View {
                 Text(updateMessage?.isEmpty == false ? (updateMessage ?? "") : "点击“检查更新”获取最新版本信息")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
+            }
+
+            if let remote = remoteUpdate {
+                HStack(spacing: 12) {
+                    Button("立即安装") {
+                        onInstall(remote)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             }
 
             Spacer()
