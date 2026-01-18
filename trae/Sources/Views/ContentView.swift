@@ -5,8 +5,12 @@ struct ContentView: View {
     @StateObject private var projectViewModel = ProjectViewModel()
     @State private var isCheckingUpdate = false
     @State private var updateMessage: String?
-    @State private var updateDownloadURL: URL?
+    @State private var remoteUpdate: Version?
     @State private var showUpdateAlert = false
+    @State private var isInstallingUpdate = false
+    @State private var installStatusMessage: String = ""
+    @State private var installErrorMessage: String?
+    @State private var showInstallErrorAlert = false
     @State private var isPresentingProjectEditor = false
     @State private var editingProject: Project?
     
@@ -34,12 +38,12 @@ struct ContentView: View {
                     }
                 }
                 .alert(isPresented: $showUpdateAlert) {
-                    if let url = updateDownloadURL {
+                    if let remote = remoteUpdate {
                         return Alert(
                             title: Text("发现新版本"),
                             message: Text(updateMessage ?? ""),
-                            primaryButton: .default(Text("下载更新")) {
-                                NSWorkspace.shared.open(url)
+                            primaryButton: .default(Text("立即安装")) {
+                                beginInstall(remote: remote)
                             },
                             secondaryButton: .cancel(Text("稍后"))
                         )
@@ -50,6 +54,22 @@ struct ContentView: View {
                             dismissButton: .default(Text("确定"))
                         )
                     }
+                }
+                .alert(isPresented: $showInstallErrorAlert) {
+                    Alert(
+                        title: Text("更新失败"),
+                        message: Text(installErrorMessage ?? ""),
+                        dismissButton: .default(Text("确定"))
+                    )
+                }
+                .sheet(isPresented: $isInstallingUpdate) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        ProgressView()
+                        Text(installStatusMessage.isEmpty ? "处理中…" : installStatusMessage)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(24)
+                    .frame(minWidth: 420)
                 }
                 .sheet(isPresented: $isPresentingProjectEditor) {
                     ProjectEditorView(project: editingProject) { project in
@@ -70,29 +90,44 @@ struct ContentView: View {
         guard !isCheckingUpdate else { return }
         isCheckingUpdate = true
         updateMessage = nil
-        updateDownloadURL = nil
+        remoteUpdate = nil
         VersionManager.checkForUpdate { result in
             isCheckingUpdate = false
             switch result {
             case .noUpdate(let current):
                 updateMessage = "当前版本 \(current) 已是最新版本。"
-                updateDownloadURL = nil
+                remoteUpdate = nil
                 showUpdateAlert = true
             case .updateAvailable(let current, let remote):
                 let notes = remote.releaseNotes ?? ""
                 updateMessage = "当前版本: \(current)\n最新版本: \(remote.version)\n\n\(notes)"
-                if let url = URL(string: remote.url) {
-                    updateDownloadURL = url
-                } else {
-                    updateDownloadURL = nil
-                }
+                remoteUpdate = remote
                 showUpdateAlert = true
             case .failure(let message):
                 updateMessage = "检查更新失败: \(message)"
-                updateDownloadURL = nil
+                remoteUpdate = nil
                 showUpdateAlert = true
             }
         }
+    }
+
+    private func beginInstall(remote: Version) {
+        guard !isInstallingUpdate else { return }
+        isInstallingUpdate = true
+        installStatusMessage = "正在开始更新…"
+        installErrorMessage = nil
+        VersionManager.downloadAndInstall(remote: remote, progress: { message in
+            installStatusMessage = message
+        }, completion: { result in
+            switch result {
+            case .success:
+                installStatusMessage = "安装完成，正在重启…"
+            case .failure(let message):
+                isInstallingUpdate = false
+                installErrorMessage = message
+                showInstallErrorAlert = true
+            }
+        })
     }
 }
 

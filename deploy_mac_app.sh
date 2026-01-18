@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="${APP_NAME:-YourApp}"
+APP_NAME="${APP_NAME:-MacApp}"
 ROOT_DOMAIN="${ROOT_DOMAIN:-}"
 SUBDOMAIN="${SUBDOMAIN:-}"
 DOMAIN="${DOMAIN:-}"
@@ -326,19 +326,22 @@ fi
 
 released_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 url="https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/${APP_NAME}.dmg"
+size_bytes="$(stat -c %s "$dmg_path" 2>/dev/null || wc -c <"$dmg_path" | tr -d ' ')"
 
 tmp_dmg="${PUBLISH_DIR%/}/${APP_NAME}.dmg.part"
 cp -f "$dmg_path" "$tmp_dmg"
 mv -f "$tmp_dmg" "${PUBLISH_DIR%/}/${APP_NAME}.dmg"
 
-python3 - "$version" "$url" "$notes" "$released_at" >"${PUBLISH_DIR%/}/${APP_NAME}.json.part" <<'PY'
+python3 - "$version" "$url" "$current_hash" "$size_bytes" "$notes" "$released_at" >"${PUBLISH_DIR%/}/${APP_NAME}.json.part" <<'PY'
 import json
 import sys
 
-version, url, release_notes, released_at = sys.argv[1:5]
+version, url, sha256, size, release_notes, released_at = sys.argv[1:7]
 payload = {
     "version": version,
     "url": url,
+    "sha256": sha256,
+    "size": int(size) if str(size).isdigit() else None,
     "releaseNotes": release_notes,
     "releasedAt": released_at,
 }

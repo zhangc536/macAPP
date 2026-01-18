@@ -4,7 +4,8 @@
 
 # 配置
 APP_NAME="YourApp"
-VERSION="1.0.0"
+VERSION="1.0.2"
+DMG_NAME="MacApp"
 
 # 确保 create-dmg 已安装
 if ! command -v create-dmg &> /dev/null; then
@@ -14,7 +15,7 @@ fi
 
 # 清理旧 DMG
 echo "Cleaning old DMG..."
-rm -f $APP_NAME.dmg
+rm -f $DMG_NAME.dmg
 
 # 检查.app文件是否存在
 if [ ! -d "../build/$APP_NAME.app" ]; then
@@ -24,7 +25,7 @@ fi
 
 echo "Creating DMG installer..."
 create-dmg \
-  --volname "$APP_NAME Installer" \
+  --volname "$DMG_NAME Installer" \
   --window-pos 200 120 \
   --window-size 600 400 \
   --app-drop-link 500 200 \
@@ -32,15 +33,15 @@ create-dmg \
   --icon-size 100 \
   --icon "$APP_NAME.app" 100 200 \
   --text-size 12 \
-  "$APP_NAME.dmg" \
+  "$DMG_NAME.dmg" \
   ../build/$APP_NAME.app
 
 # 验证 DMG
 echo "Verifying DMG..."
-if [ -f "$APP_NAME.dmg" ]; then
-    echo "✅ DMG created successfully: $APP_NAME.dmg"
-    echo "Size: $(du -h $APP_NAME.dmg | cut -f1)"
-    echo "SHA256: $(shasum -a 256 $APP_NAME.dmg | cut -d' ' -f1)"
+if [ -f "$DMG_NAME.dmg" ]; then
+    echo "✅ DMG created successfully: $DMG_NAME.dmg"
+    echo "Size: $(du -h $DMG_NAME.dmg | cut -f1)"
+    echo "SHA256: $(shasum -a 256 $DMG_NAME.dmg | cut -d' ' -f1)"
 else
     echo "❌ DMG creation failed!"
     exit 1

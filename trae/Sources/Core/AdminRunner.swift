@@ -2,17 +2,13 @@ import Foundation
 
 final class AdminRunner {
     static func run(command: String, onOutput: @escaping (String) -> Void = { _ in }, onExit: @escaping (Int32) -> Void = { _ in }) {
-        // 使用 AppleScript 执行 sudo 命令，触发系统授权弹窗
-        let appleScript = "do shell script \"\(command)\" with administrator privileges"
-        let scriptCommand = "osascript -e '\(appleScript)'"
-        
         let task = Process()
         let pipe = Pipe()
         
         task.standardOutput = pipe
         task.standardError = pipe
-        task.arguments = ["-c", scriptCommand]
-        task.executableURL = URL(fileURLWithPath: "/bin/bash")
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        task.arguments = ["-e", makeAppleScript(command: command)]
         
         let fileHandle = pipe.fileHandleForReading
         fileHandle.readabilityHandler = { fileHandle in
@@ -35,5 +31,16 @@ final class AdminRunner {
         DispatchQueue.global().async {
             run(command: command, onOutput: onOutput, onExit: onExit)
         }
+    }
+
+    private static func makeAppleScript(command: String) -> String {
+        let normalized = command
+            .replacingOccurrences(of: "\r\n", with: "; ")
+            .replacingOccurrences(of: "\n", with: "; ")
+            .replacingOccurrences(of: "\r", with: "; ")
+        let escaped = normalized
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "do shell script \"\(escaped)\" with administrator privileges"
     }
 }

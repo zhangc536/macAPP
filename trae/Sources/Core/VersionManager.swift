@@ -1,4 +1,7 @@
 import Foundation
+import CryptoKit
+import AppKit
+import Darwin
 
 enum UpdateCheckResult {
     case noUpdate(current: String)
@@ -76,6 +79,84 @@ final class VersionManager {
         }
         task.resume()
     }
+
+    static func downloadAndInstall(remote: Version, progress: @escaping (String) -> Void, completion: @escaping (Result<Void, String>) -> Void) {
+        guard let dmgURL = URL(string: remote.url) else {
+            completion(.failure("下载地址无效"))
+            return
+        }
+
+        let request = URLRequest(url: dmgURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
+        progress("正在下载更新…")
+
+        let task = URLSession.shared.downloadTask(with: request) { tempURL, response, error in
+            if let error = error {
+                DispatchQueue.main.async {
+                    completion(.failure(error.localizedDescription))
+                }
+                return
+            }
+            guard let tempURL = tempURL else {
+                DispatchQueue.main.async {
+                    completion(.failure("下载失败：未生成临时文件"))
+                }
+                return
+            }
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let downloadsDir = try ensureUpdateDownloadDirectory()
+                    let targetURL = downloadsDir.appendingPathComponent("update.dmg")
+                    if FileManager.default.fileExists(atPath: targetURL.path) {
+                        try FileManager.default.removeItem(at: targetURL)
+                    }
+                    do {
+                        try FileManager.default.moveItem(at: tempURL, to: targetURL)
+                    } catch {
+                        try FileManager.default.copyItem(at: tempURL, to: targetURL)
+                        try? FileManager.default.removeItem(at: tempURL)
+                    }
+
+                    DispatchQueue.main.async {
+                        progress("正在校验更新包…")
+                    }
+
+                    if let expectedSize = remote.size {
+                        let attrs = try FileManager.default.attributesOfItem(atPath: targetURL.path)
+                        let fileSize = (attrs[.size] as? NSNumber)?.int64Value ?? -1
+                        if fileSize != expectedSize {
+                            throw NSError(domain: "Update", code: 2, userInfo: [NSLocalizedDescriptionKey: "文件大小不匹配"])
+                        }
+                    }
+
+                    if let expectedSHA256 = remote.sha256?.trimmingCharacters(in: .whitespacesAndNewlines), !expectedSHA256.isEmpty {
+                        let actual = try sha256Hex(of: targetURL)
+                        if actual.lowercased() != expectedSHA256.lowercased() {
+                            throw NSError(domain: "Update", code: 3, userInfo: [NSLocalizedDescriptionKey: "SHA256 校验失败"])
+                        }
+                    }
+
+                    DispatchQueue.main.async {
+                        progress("正在准备安装…")
+                    }
+
+                    try mountAndStageInstall(dmgURL: targetURL)
+
+                    DispatchQueue.main.async {
+                        completion(.success(()))
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            NSApplication.shared.terminate(nil)
+                        }
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        completion(.failure(error.localizedDescription))
+                    }
+                }
+            }
+        }
+        task.resume()
+    }
     
     private static func makeMetadataURL(from urlString: String) -> URL? {
         guard var components = URLComponents(string: urlString) else {
@@ -90,6 +171,119 @@ final class VersionManager {
             }
         }
         return components.url
+    }
+
+    private static func ensureUpdateDownloadDirectory() throws -> URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
+        let bundle = Bundle.main.bundleIdentifier ?? "YourApp"
+        let dir = base.appendingPathComponent(bundle).appendingPathComponent("Updates", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private static func sha256Hex(of fileURL: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while true {
+            let chunk = try handle.read(upToCount: 1024 * 1024) ?? Data()
+            if chunk.isEmpty { break }
+            hasher.update(data: chunk)
+        }
+        let digest = hasher.finalize()
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func mountAndStageInstall(dmgURL: URL) throws {
+        let mountPoint = FileManager.default.temporaryDirectory.appendingPathComponent("YourAppUpdateMount-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
+
+        let attach = runProcess(executable: "/usr/bin/hdiutil", arguments: ["attach", "-nobrowse", "-readonly", "-mountpoint", mountPoint.path, dmgURL.path])
+        guard attach.status == 0 else {
+            throw NSError(domain: "Update", code: 10, userInfo: [NSLocalizedDescriptionKey: "挂载 DMG 失败"])
+        }
+
+        let appURL = try findAppBundle(in: mountPoint)
+        let appName = Bundle.main.bundleURL.lastPathComponent
+        let destination = URL(fileURLWithPath: "/Applications").appendingPathComponent(appName)
+        let staged = URL(fileURLWithPath: "/Applications").appendingPathComponent(appName + ".new")
+        let backup = URL(fileURLWithPath: "/Applications").appendingPathComponent(appName + ".old")
+
+        let pid = Int(getpid())
+        let background = [
+            "set -euo pipefail",
+            "pid=\(pid)",
+            "dest=\(shQuote(destination.path))",
+            "new=\(shQuote(staged.path))",
+            "backup=\(shQuote(backup.path))",
+            "while kill -0 \"$pid\" 2>/dev/null; do sleep 0.2; done",
+            "rm -rf \"$backup\"",
+            "if [ -d \"$dest\" ]; then mv \"$dest\" \"$backup\"; fi",
+            "mv \"$new\" \"$dest\"",
+            "/usr/bin/xattr -dr com.apple.quarantine \"$dest\" 2>/dev/null || true",
+            "/usr/bin/open \"$dest\"",
+        ].joined(separator: "; ")
+
+        let command = [
+            "set -euo pipefail",
+            "src=\(shQuote(appURL.path))",
+            "mount=\(shQuote(mountPoint.path))",
+            "staged=\(shQuote(staged.path))",
+            "rm -rf \"$staged\"",
+            "/usr/bin/ditto \"$src\" \"$staged\"",
+            "/usr/bin/hdiutil detach \"$mount\" -force >/dev/null 2>&1 || true",
+            "/usr/bin/nohup /bin/bash -c \(shQuote(background)) >/dev/null 2>&1 &",
+        ].joined(separator: "; ")
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var exitStatus: Int32 = 1
+        AdminRunner.run(command: command, onOutput: { _ in }, onExit: { status in
+            exitStatus = status
+            semaphore.signal()
+        })
+        semaphore.wait()
+
+        if exitStatus != 0 {
+            _ = runProcess(executable: "/usr/bin/hdiutil", arguments: ["detach", mountPoint.path, "-force"])
+            throw NSError(domain: "Update", code: 11, userInfo: [NSLocalizedDescriptionKey: "安装准备失败或取消授权"])
+        }
+    }
+
+    private static func findAppBundle(in mountPoint: URL) throws -> URL {
+        let expectedName = Bundle.main.bundleURL.lastPathComponent
+        let expectedURL = mountPoint.appendingPathComponent(expectedName)
+        if FileManager.default.fileExists(atPath: expectedURL.path) {
+            return expectedURL
+        }
+
+        let enumerator = FileManager.default.enumerator(at: mountPoint, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
+        while let url = enumerator?.nextObject() as? URL {
+            if url.pathExtension == "app", url.lastPathComponent == expectedName {
+                return url
+            }
+        }
+        throw NSError(domain: "Update", code: 12, userInfo: [NSLocalizedDescriptionKey: "未在 DMG 中找到 \(expectedName)"])
+    }
+
+    private static func runProcess(executable: String, arguments: [String]) -> (status: Int32, output: String) {
+        let task = Process()
+        let pipe = Pipe()
+        task.executableURL = URL(fileURLWithPath: executable)
+        task.arguments = arguments
+        task.standardOutput = pipe
+        task.standardError = pipe
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return (1, "\(error)")
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return (task.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+    }
+
+    private static func shQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
     
     private static func compareVersion(_ lhs: String, _ rhs: String) -> Int {
@@ -108,4 +302,3 @@ final class VersionManager {
         return 0
     }
 }
-
