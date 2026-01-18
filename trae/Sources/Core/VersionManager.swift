@@ -168,6 +168,10 @@ final class VersionManager {
                         }
                     } catch {
                         DispatchQueue.main.async {
+                            let nsError = error as NSError
+                            if nsError.domain == "Update" && (nsError.code == 10 || nsError.code == 11 || nsError.code == 12) {
+                                NSWorkspace.shared.open(targetURL)
+                            }
                             completion(.failure(error))
                         }
                     }
@@ -228,14 +232,16 @@ final class VersionManager {
         }
 
         let appURL = try findAppBundle(in: mountPoint)
-        let appName = Bundle.main.bundleURL.lastPathComponent
-        let destination = URL(fileURLWithPath: "/Applications").appendingPathComponent(appName)
-        let staged = URL(fileURLWithPath: "/Applications").appendingPathComponent(appName + ".new")
-        let backup = URL(fileURLWithPath: "/Applications").appendingPathComponent(appName + ".old")
+        let currentAppURL = Bundle.main.bundleURL
+        let appName = currentAppURL.lastPathComponent
+        let appDirectory = currentAppURL.deletingLastPathComponent()
+        let destination = appDirectory.appendingPathComponent(appName)
+        let staged = appDirectory.appendingPathComponent(appName + ".new")
+        let backup = appDirectory.appendingPathComponent(appName + ".old")
 
         let pid = Int(getpid())
         let background = [
-            "set -euo pipefail",
+            "set -e",
             "pid=\(pid)",
             "dest=\(shQuote(destination.path))",
             "new=\(shQuote(staged.path))",
@@ -249,7 +255,7 @@ final class VersionManager {
         ].joined(separator: "; ")
 
         let command = [
-            "set -euo pipefail",
+            "set -e",
             "src=\(shQuote(appURL.path))",
             "mount=\(shQuote(mountPoint.path))",
             "staged=\(shQuote(staged.path))",
@@ -261,7 +267,10 @@ final class VersionManager {
 
         let semaphore = DispatchSemaphore(value: 0)
         var exitStatus: Int32 = 1
-        AdminRunner.run(command: command, onOutput: { _ in }, onExit: { status in
+        var outputLog = ""
+        AdminRunner.run(command: command, onOutput: { text in
+            outputLog += text
+        }, onExit: { status in
             exitStatus = status
             semaphore.signal()
         })
@@ -269,7 +278,9 @@ final class VersionManager {
 
         if exitStatus != 0 {
             _ = runProcess(executable: "/usr/bin/hdiutil", arguments: ["detach", mountPoint.path, "-force"])
-            throw NSError(domain: "Update", code: 11, userInfo: [NSLocalizedDescriptionKey: "安装准备失败或取消授权"])
+            let trimmed = outputLog.trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = trimmed.isEmpty ? "安装准备失败或取消授权" : "安装失败：\(trimmed)"
+            throw NSError(domain: "Update", code: 11, userInfo: [NSLocalizedDescriptionKey: message])
         }
     }
 

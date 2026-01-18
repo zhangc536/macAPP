@@ -42,6 +42,8 @@ struct ContentView: View {
     @State private var showInstallErrorAlert = false
     @State private var isPresentingProjectEditor = false
     @State private var editingProject: Project?
+    @AppStorage("autoCheckUpdateEnabled") private var autoCheckUpdateEnabled: Bool = true
+    @AppStorage("lastUpdateCheckTime") private var lastUpdateCheckTime: Double = 0
     
     var body: some View {
         NavigationSplitView {
@@ -118,7 +120,12 @@ struct ContentView: View {
                         updateMessage: updateMessage,
                         currentVersion: VersionManager.currentAppVersion(),
                         remoteUpdate: remoteUpdate,
+                        autoCheckEnabled: autoCheckUpdateEnabled,
+                        lastCheckedText: formattedLastUpdateCheckTime(),
                         onCheck: triggerUpdateCheck,
+                        onToggleAutoCheck: { enabled in
+                            autoCheckUpdateEnabled = enabled
+                        },
                         onInstall: { remote in
                             beginInstall(remote: remote)
                         }
@@ -173,11 +180,15 @@ struct ContentView: View {
                 }
             }
         }
+        .onAppear {
+            maybeAutoCheckUpdate()
+        }
     }
     
     private func triggerUpdateCheck() {
         guard !isCheckingUpdate else { return }
         isCheckingUpdate = true
+        lastUpdateCheckTime = Date().timeIntervalSince1970
         updateMessage = nil
         remoteUpdate = nil
         VersionManager.checkForUpdate { result in
@@ -218,10 +229,31 @@ struct ContentView: View {
                 }
             case .failure(let error):
                 isInstallingUpdate = false
-                installErrorMessage = error.localizedDescription
+                let base = error.localizedDescription
+                let extra = "如果已自动打开安装包窗口，可以将 YourApp.app 拖动到“应用程序”完成更新。"
+                installErrorMessage = base.isEmpty ? extra : base + "\n\n" + extra
                 showInstallErrorAlert = true
             }
         })
+    }
+
+    private func maybeAutoCheckUpdate() {
+        guard autoCheckUpdateEnabled else { return }
+        let now = Date().timeIntervalSince1970
+        if lastUpdateCheckTime <= 0 || now - lastUpdateCheckTime > 6 * 3600 {
+            triggerUpdateCheck()
+        }
+    }
+
+    private func formattedLastUpdateCheckTime() -> String? {
+        if lastUpdateCheckTime <= 0 {
+            return nil
+        }
+        let date = Date(timeIntervalSince1970: lastUpdateCheckTime)
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 }
 
@@ -234,7 +266,10 @@ private struct UpdatesView: View {
     let updateMessage: String?
     let currentVersion: String
     let remoteUpdate: Version?
+    let autoCheckEnabled: Bool
+    let lastCheckedText: String?
     let onCheck: () -> Void
+    let onToggleAutoCheck: (Bool) -> Void
     let onInstall: (Version) -> Void
 
     var body: some View {
@@ -245,6 +280,14 @@ private struct UpdatesView: View {
                 Text(currentVersion)
                     .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
+            }
+
+            Toggle("自动检查更新", isOn: .init(get: { autoCheckEnabled }, set: { onToggleAutoCheck($0) }))
+
+            if let last = lastCheckedText {
+                Text("上次检查时间：\(last)")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
             }
 
             HStack(spacing: 12) {
