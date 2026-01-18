@@ -41,7 +41,7 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update -y
-apt-get install -y nginx certbot jq curl python3 p7zip-full
+apt-get install -y nginx certbot jq curl python3 p7zip-full dmg2img hfsprogs
 if [[ -n "$CF_API_TOKEN" ]]; then
   apt-get install -y python3-certbot-dns-cloudflare
 else
@@ -196,7 +196,7 @@ cat >/usr/local/bin/macapp-publish.sh <<'PUBLISH'
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="${APP_NAME:-YourApp}"
+APP_NAME="${APP_NAME:-MacApp}"
 DOMAIN="${DOMAIN:-}"
 PUBLIC_PATH_PREFIX="${PUBLIC_PATH_PREFIX:-/downloads}"
 PUBLISH_DIR="${PUBLISH_DIR:-/srv/macapp/downloads}"
@@ -242,9 +242,46 @@ PY
 
 version_from_dmg() {
   local dmg_path="$1"
-  local tmp_dir
+  local tmp_dir img img_out
   tmp_dir="$(mktemp -d -t macapp_dmg.XXXXXX)"
-  trap 'rm -rf "$tmp_dir"' RETURN
+  img="$tmp_dir/disk.img"
+  img_out="$tmp_dir/img"
+  mkdir -p "$img_out"
+
+  cleanup() {
+    rm -rf "$tmp_dir" >/dev/null 2>&1 || true
+  }
+  trap cleanup RETURN
+
+  if command -v dmg2img >/dev/null 2>&1 && command -v 7z >/dev/null 2>&1; then
+    dmg2img "$dmg_path" "$img" >/dev/null 2>&1 || true
+    if [[ -f "$img" ]]; then
+      7z x -y -o"$img_out" "$img" >/dev/null 2>&1 || true
+      python3 - "$img_out" <<'PY'
+import os
+import plistlib
+import sys
+
+root = sys.argv[1]
+candidates = []
+for base, _, files in os.walk(root):
+    if "Info.plist" in files and ".app/Contents" in base.replace("\\", "/"):
+        candidates.append(os.path.join(base, "Info.plist"))
+
+for path in sorted(candidates, key=len):
+    try:
+        with open(path, "rb") as f:
+            plist = plistlib.load(f)
+        v = plist.get("CFBundleShortVersionString") or plist.get("CFBundleVersion")
+        if isinstance(v, str) and v.strip():
+            print(v.strip())
+            break
+    except Exception:
+        continue
+PY
+      return 0
+    fi
+  fi
 
   if ! command -v 7z >/dev/null 2>&1; then
     return 1
@@ -297,13 +334,6 @@ fi
 mkdir -p "$PUBLISH_DIR"
 
 current_hash="$(sha256_of_file "$dmg_path")"
-hash_file="${PUBLISH_DIR%/}/.last_sha256"
-if [[ -f "$hash_file" ]]; then
-  last_hash="$(cat "$hash_file" || true)"
-  if [[ "$current_hash" == "$last_hash" ]]; then
-    exit 0
-  fi
-fi
 
 stem="$(basename "$dmg_path")"
 stem="${stem%.dmg}"
@@ -324,6 +354,23 @@ if [[ -f "$notes_file" ]]; then
   notes="$(cat "$notes_file")"
 fi
 
+signature_file="${PUBLISH_DIR%/}/.last_signature"
+signature="$(python3 - "$current_hash" "$version" "$notes" <<'PY'
+import hashlib
+import sys
+
+h = hashlib.sha256()
+h.update((sys.argv[1] + "\n" + sys.argv[2] + "\n" + sys.argv[3]).encode("utf-8", "ignore"))
+print(h.hexdigest())
+PY
+)"
+if [[ -f "$signature_file" ]]; then
+  last_sig="$(cat "$signature_file" || true)"
+  if [[ "$signature" == "$last_sig" ]]; then
+    exit 0
+  fi
+fi
+
 released_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 url="https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/${APP_NAME}.dmg"
 size_bytes="$(stat -c %s "$dmg_path" 2>/dev/null || wc -c <"$dmg_path" | tr -d ' ')"
@@ -337,6 +384,7 @@ import json
 import sys
 
 version, url, sha256, size, release_notes, released_at = sys.argv[1:7]
+url = url.strip().strip("`").strip()
 payload = {
     "version": version,
     "url": url,
@@ -349,7 +397,7 @@ sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 PY
 mv -f "${PUBLISH_DIR%/}/${APP_NAME}.json.part" "${PUBLISH_DIR%/}/${APP_NAME}.json"
 
-echo "$current_hash" >"$hash_file"
+echo "$signature" >"$signature_file"
 PUBLISH
 
 chmod 755 /usr/local/bin/macapp-publish.sh

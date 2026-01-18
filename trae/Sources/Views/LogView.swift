@@ -6,10 +6,10 @@ struct LogView: View {
     var body: some View {
         VStack {
             HStack {
-                Text("Logs")
+                Text("日志")
                     .font(.headline)
                 Spacer()
-                Button("Clear") {
+                Button("清空") {
                     logs = ""
                 }
                 .buttonStyle(.bordered)
@@ -26,5 +26,5 @@ struct LogView: View {
 }
 
 #Preview {
-    LogView(logs: .constant("[10:30:45] Starting app...\n[10:30:46] Loading projects...\n"))
+    LogView(logs: .constant("[10:30:45] 应用启动...\n[10:30:46] 正在加载项目...\n"))
 }

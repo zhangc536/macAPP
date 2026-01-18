@@ -1,26 +1,38 @@
 import SwiftUI
+import AppKit
 
 struct ProjectListView: View {
     @ObservedObject var viewModel: ProjectViewModel
     @State private var selectedProjectForMonitor: Project?
+
+    private func displayStatus(_ status: String) -> String {
+        switch status {
+        case "running":
+            return "运行中"
+        case "stopped":
+            return "已停止"
+        default:
+            return status
+        }
+    }
     
     var body: some View {
         VStack {
             // 批量操作按钮区域
             HStack {
-                Button("Deploy All Projects") {
+                Button("部署全部项目") {
                     viewModel.deployAllProjects()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
                 
-                Button("Start All Projects") {
+                Button("启动全部项目") {
                     viewModel.runAllProjects(action: "start")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
                 
-                Button("Stop All Projects") {
+                Button("停止全部项目") {
                     viewModel.runAllProjects(action: "stop")
                 }
                 .buttonStyle(.borderedProminent)
@@ -34,49 +46,56 @@ struct ProjectListView: View {
                         Text(project.name)
                             .font(.headline)
                         Spacer()
-                        Text(project.status)
+                        Text(displayStatus(project.status))
                             .font(.subheadline)
                             .foregroundColor(project.status == "running" ? .green : .red)
                     }
                     
-                    Text("Type: \(project.type)")
+                    Text("类型：\(project.type)")
                         .font(.subheadline)
                         .foregroundColor(.gray)
                     
-                    Text("Path: \(project.path)")
+                    Text("路径：\(project.path)")
                         .font(.subheadline)
                         .foregroundColor(.gray)
                         .lineLimit(1)
                     
-                    Text("Ports: \(project.ports.map(String.init).joined(separator: ", "))")
+                    Text("端口：\(project.ports.map(String.init).joined(separator: ", "))")
                         .font(.subheadline)
                         .foregroundColor(.gray)
                     
                     HStack(spacing: 8) {
                         if project.status == "stopped" {
-                            Button("Start") {
+                            Button("启动") {
                                 viewModel.startProject(project)
                             }
                             .buttonStyle(.borderedProminent)
                         } else {
-                            Button("Stop") {
+                            Button("停止") {
                                 viewModel.stopProject(project)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.red)
                         }
                         
-                        Button("Deploy") {
+                        Button("部署") {
                             viewModel.deployProject(project)
                         }
                         .buttonStyle(.bordered)
                         
-                        Button("Monitor") {
+                        if let launcherPath = project.launcherPath, !launcherPath.isEmpty {
+                            Button("启动文件") {
+                                NSWorkspace.shared.open(URL(fileURLWithPath: launcherPath))
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        Button("监控") {
                             selectedProjectForMonitor = project
                         }
                         .buttonStyle(.bordered)
                         
-                        Button("Logs") {
+                        Button("日志") {
                             selectedProjectForMonitor = project
                         }
                         .buttonStyle(.bordered)
@@ -147,21 +166,11 @@ final class ProjectMonitorViewModel: ObservableObject {
     }
     
     private func readLog() -> String {
-        let path = "\(project.path)/\(project.logPath)"
-        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
-            return "Log file not found"
-        }
-        let lines = content.split(separator: "\n")
-        let lastLines = lines.suffix(200)
-        return lastLines.joined(separator: "\n")
+        Monitor.readRecentLogs(project, tail: 200)
     }
     
     private func checkPort() -> String {
-        guard let port = project.ports.first else {
-            return "No port configured"
-        }
-        let inUse = Monitor.checkPortInUse(port)
-        return inUse ? "Port \(port) in use" : "Port \(port) not listening"
+        Monitor.portStatusText(project)
     }
 }
 
@@ -183,7 +192,7 @@ struct ProjectMonitorView: View {
                     .font(.subheadline)
                     .foregroundColor(.gray)
                 if let port = project.ports.first {
-                    Text("Port: \(port)")
+                    Text("端口：\(port)")
                         .font(.subheadline)
                         .foregroundColor(.gray)
                 }
@@ -192,7 +201,7 @@ struct ProjectMonitorView: View {
             Divider()
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("Port Status")
+                Text("端口状态")
                     .font(.headline)
                 Text(viewModel.portStatus)
                     .font(.system(.body, design: .monospaced))
@@ -202,12 +211,12 @@ struct ProjectMonitorView: View {
             Divider()
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("Processes")
+                Text("进程")
                     .font(.headline)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
                         if viewModel.processes.isEmpty {
-                            Text("No running processes")
+                            Text("暂无运行中的进程")
                                 .foregroundColor(.gray)
                         } else {
                             ForEach(viewModel.processes, id: \.self) { line in
@@ -223,7 +232,7 @@ struct ProjectMonitorView: View {
             Divider()
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("Logs")
+                Text("日志")
                     .font(.headline)
                 ScrollView {
                     Text(viewModel.logText)

@@ -2,32 +2,194 @@ import Foundation
 
 final class ProjectRunner {
     static func run(project: Project, action: String, onLog: @escaping (String) -> Void) {
+        if action == "start" {
+            guard let launcherPath = project.launcherPath, !launcherPath.isEmpty else {
+                onLog("未配置启动文件，已禁止通过 URL 启动。")
+                return
+            }
+            if openLauncher(path: launcherPath, onLog: onLog) {
+                updateProjectStatus(project: project, status: "running")
+            }
+            return
+        }
+
         if let scriptUrl = project.scriptUrls?[action] {
-            let command = "bash <(curl -fsSL \(scriptUrl))"
+            let quotedURL = shellQuote(scriptUrl)
+            let scriptCommand = "bash <(curl -fsSL \(quotedURL))"
             
             // 判断是否需要sudo权限
             let needSudo = project.needsSudo?[action] ?? false
+
+            if action == "deploy", needSudo {
+                onLog("部署前检查 Homebrew…")
+                guard ensureHomebrewInstalled(onLog: onLog) else {
+                    onLog("Homebrew 未就绪，已取消部署。")
+                    return
+                }
+
+                onLog("执行部署（管理员权限）…")
+                AdminRunner.run(command: scriptCommand, onOutput: onLog, onExit: { status in
+                    onLog("部署完成，退出码: \(status)")
+                    if status == 0 {
+                        captureLauncherAfterDeploy(project: project, onLog: onLog)
+                    }
+                })
+                return
+            }
             
             if needSudo {
-                onLog("Executing admin command: \(command)")
-                AdminRunner.run(command: command, onOutput: onLog, onExit: { status in
-                    onLog("Admin command completed with status: \(status)")
+                onLog("执行管理员命令: \(scriptCommand)")
+                AdminRunner.run(command: scriptCommand, onOutput: onLog, onExit: { status in
+                    onLog("管理员命令完成，退出码: \(status)")
                     if status == 0 {
                         updateProjectStatus(project: project, status: action == "stop" ? "stopped" : "running")
                     }
                 })
             } else {
-                onLog("Executing command: \(command)")
-                ShellRunner.run(command: command, workingDir: project.path, onOutput: onLog, onExit: { status in
-                    onLog("Command completed with status: \(status)")
+                let finalCommand: String
+                if action == "deploy" {
+                    finalCommand = wrapWithHomebrewEnsure(scriptCommand)
+                } else {
+                    finalCommand = scriptCommand
+                }
+
+                onLog("执行命令: \(finalCommand)")
+                ShellRunner.run(command: finalCommand, workingDir: project.path, onOutput: onLog, onExit: { status in
+                    onLog("命令完成，退出码: \(status)")
                     if status == 0 {
                         updateProjectStatus(project: project, status: action == "stop" ? "stopped" : "running")
+                        if action == "deploy" {
+                            captureLauncherAfterDeploy(project: project, onLog: onLog)
+                        }
                     }
                 })
             }
         } else {
-            onLog("Error: Script URL not found for action: \(action)")
+            onLog("错误：未找到对应脚本 URL（action=\(action)）")
         }
+    }
+
+    private static func openLauncher(path: String, onLog: @escaping (String) -> Void) -> Bool {
+        guard FileManager.default.fileExists(atPath: path) else {
+            onLog("启动文件不存在：\(path)")
+            return false
+        }
+
+        let command = "/usr/bin/open \(shellQuote(path))"
+        let semaphore = DispatchSemaphore(value: 0)
+        var ok = false
+        ShellRunner.run(command: command, workingDir: nil, onOutput: { output in
+            let text = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                onLog(text)
+            }
+        }, onExit: { status in
+            ok = (status == 0)
+            semaphore.signal()
+        })
+        semaphore.wait()
+        if ok {
+            onLog("已通过启动文件启动：\(URL(fileURLWithPath: path).lastPathComponent)")
+        } else {
+            onLog("启动文件启动失败：\(URL(fileURLWithPath: path).lastPathComponent)")
+        }
+        return ok
+    }
+
+    private static func captureLauncherAfterDeploy(project: Project, onLog: @escaping (String) -> Void) {
+        guard let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first else {
+            onLog("未能获取桌面目录，无法捕获启动文件。")
+            return
+        }
+
+        let candidates: [URL]
+        do {
+            candidates = try FileManager.default.contentsOfDirectory(
+                at: desktopURL,
+                includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            onLog("读取桌面目录失败：\(error.localizedDescription)")
+            return
+        }
+
+        let matched = candidates.compactMap { url -> (url: URL, mtime: Date)? in
+            let baseName = url.deletingPathExtension().lastPathComponent
+            guard baseName == project.name else { return nil }
+            let isRegular = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? true
+            guard isRegular else { return nil }
+            let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
+            return (url, mtime)
+        }
+        .sorted { $0.mtime > $1.mtime }
+        .first
+
+        guard let found = matched?.url else {
+            onLog("未在桌面找到启动文件：\(project.name)(.*)")
+            return
+        }
+
+        saveLauncherPath(projectId: project.id, launcherPath: found.path)
+        onLog("已捕获启动文件：\(found.lastPathComponent)")
+    }
+
+    private static func saveLauncherPath(projectId: String, launcherPath: String) {
+        var projects = loadProjects()
+        if let index = projects.firstIndex(where: { $0.id == projectId }) {
+            projects[index].launcherPath = launcherPath
+            saveProjects(projects)
+        }
+    }
+
+    private static func ensureHomebrewInstalled(onLog: @escaping (String) -> Void) -> Bool {
+        let command = """
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH";
+        if command -v brew >/dev/null 2>&1; then
+          brew --version | head -n 1
+          exit 0
+        fi;
+        echo "未检测到 Homebrew，开始安装…";
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)";
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH";
+        if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi;
+        if [ -x /usr/local/bin/brew ]; then eval "$(/usr/local/bin/brew shellenv)"; fi;
+        command -v brew >/dev/null 2>&1 || { echo "Homebrew 安装失败或未完成"; exit 1; };
+        brew --version | head -n 1
+        """
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var ok = false
+        ShellRunner.run(command: command, workingDir: nil, onOutput: { output in
+            let text = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                onLog(text)
+            }
+        }, onExit: { status in
+            ok = (status == 0)
+            semaphore.signal()
+        })
+        semaphore.wait()
+        return ok
+    }
+
+    private static func wrapWithHomebrewEnsure(_ inner: String) -> String {
+        """
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH";
+        if ! command -v brew >/dev/null 2>&1; then
+          echo "未检测到 Homebrew，开始安装…";
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)";
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH";
+          if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi;
+          if [ -x /usr/local/bin/brew ]; then eval "$(/usr/local/bin/brew shellenv)"; fi;
+        fi;
+        command -v brew >/dev/null 2>&1 || { echo "Homebrew 未就绪，请先完成安装后重试"; exit 1; };
+        \(inner)
+        """
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
     
     static func runAsync(project: Project, action: String, onLog: @escaping (String) -> Void) {
@@ -59,6 +221,16 @@ final class ProjectRunner {
     static func checkStatus(project: Project, onStatus: @escaping (String) -> Void) {
         let semaphore = DispatchSemaphore(value: 0)
         var status = "stopped"
+
+        if project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "docker" {
+            if Monitor.isDockerContainerRunning(project) {
+                status = "running"
+            }
+            onStatus(status)
+            updateProjectStatus(project: project, status: status)
+            semaphore.signal()
+            return
+        }
         
         // 检查端口是否被占用
         if let port = project.ports.first {
@@ -141,16 +313,27 @@ final class ProjectRunner {
     
     static func deployAll(projects: [Project], onLog: @escaping (String) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
-            for project in projects {
+            DispatchQueue.main.async {
+                onLog("部署前检查 Homebrew…")
+            }
+            guard ensureHomebrewInstalled(onLog: { log in
                 DispatchQueue.main.async {
-                    onLog("Starting deployment for project: \(project.name)")
+                    onLog(log)
                 }
-                
-                // 在单独的队列中运行每个项目的部署
-                let group = DispatchGroup()
+            }) else {
+                DispatchQueue.main.async {
+                    onLog("Homebrew 未就绪，已取消全部部署。")
+                }
+                return
+            }
+
+            let group = DispatchGroup()
+            for project in projects {
                 group.enter()
-                
-                DispatchQueue.global().async {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    DispatchQueue.main.async {
+                        onLog("Starting deployment for project: \(project.name)")
+                    }
                     deploy(project: project) { log in
                         DispatchQueue.main.async {
                             onLog(log)
@@ -158,15 +341,9 @@ final class ProjectRunner {
                     }
                     group.leave()
                 }
-                
-                // 等待当前项目部署完成后再继续下一个
-                group.wait()
-                
-                // 添加短暂延迟以避免资源冲突
-                Thread.sleep(forTimeInterval: 1.0)
             }
-            
-            DispatchQueue.main.async {
+
+            group.notify(queue: .main) {
                 onLog("All projects deployed successfully!")
             }
         }

@@ -8,6 +8,7 @@ struct Project: Codable, Identifiable {
     var ports: [Int]
     var scripts: [String: String]?
     var scriptUrls: [String: String]?
+    var launcherPath: String?
     var pid: Int?
     var status: String = "stopped"
     var logPath: String = "app.log"
