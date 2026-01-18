@@ -117,58 +117,64 @@ final class VersionManager {
                 }
                 return
             }
-
-            DispatchQueue.global(qos: .userInitiated).async {
+            
+            do {
+                let downloadsDir = try ensureUpdateDownloadDirectory()
+                let targetURL = downloadsDir.appendingPathComponent("update.dmg")
+                if FileManager.default.fileExists(atPath: targetURL.path) {
+                    try FileManager.default.removeItem(at: targetURL)
+                }
                 do {
-                    let downloadsDir = try ensureUpdateDownloadDirectory()
-                    let targetURL = downloadsDir.appendingPathComponent("update.dmg")
-                    if FileManager.default.fileExists(atPath: targetURL.path) {
-                        try FileManager.default.removeItem(at: targetURL)
-                    }
-                    do {
-                        try FileManager.default.moveItem(at: tempURL, to: targetURL)
-                    } catch {
-                        try FileManager.default.copyItem(at: tempURL, to: targetURL)
-                        try? FileManager.default.removeItem(at: tempURL)
-                    }
-
-                    DispatchQueue.main.async {
-                        progress("正在校验更新包…")
-                    }
-
-                    if let expectedSize = remote.size {
-                        let attrs = try FileManager.default.attributesOfItem(atPath: targetURL.path)
-                        let fileSize = (attrs[.size] as? NSNumber)?.int64Value ?? -1
-                        if fileSize != expectedSize {
-                            throw NSError(domain: "Update", code: 2, userInfo: [NSLocalizedDescriptionKey: "文件大小不匹配"])
-                        }
-                    }
-
-                    if let expectedSHA256 = remote.sha256?.trimmingCharacters(in: shaTrimCharacters), !expectedSHA256.isEmpty {
-                        let actual = try sha256Hex(of: targetURL)
-                        if actual.lowercased() != expectedSHA256.lowercased() {
-                            throw NSError(domain: "Update", code: 3, userInfo: [NSLocalizedDescriptionKey: "SHA256 校验失败"])
-                        }
-                    }
-
-                    DispatchQueue.main.async {
-                        progress("正在准备安装…")
-                    }
-
-                    try mountAndStageInstall(dmgURL: targetURL)
-
-                    try? FileManager.default.removeItem(at: targetURL)
-
-                    DispatchQueue.main.async {
-                        completion(.success(()))
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                            NSApplication.shared.terminate(nil)
-                        }
-                    }
+                    try FileManager.default.moveItem(at: tempURL, to: targetURL)
                 } catch {
-                    DispatchQueue.main.async {
-                        completion(.failure(error))
+                    try FileManager.default.copyItem(at: tempURL, to: targetURL)
+                    try? FileManager.default.removeItem(at: tempURL)
+                }
+                
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        DispatchQueue.main.async {
+                            progress("正在校验更新包…")
+                        }
+                        
+                        if let expectedSize = remote.size {
+                            let attrs = try FileManager.default.attributesOfItem(atPath: targetURL.path)
+                            let fileSize = (attrs[.size] as? NSNumber)?.int64Value ?? -1
+                            if fileSize != expectedSize {
+                                throw NSError(domain: "Update", code: 2, userInfo: [NSLocalizedDescriptionKey: "文件大小不匹配"])
+                            }
+                        }
+                        
+                        if let expectedSHA256 = remote.sha256?.trimmingCharacters(in: shaTrimCharacters), !expectedSHA256.isEmpty {
+                            let actual = try sha256Hex(of: targetURL)
+                            if actual.lowercased() != expectedSHA256.lowercased() {
+                                throw NSError(domain: "Update", code: 3, userInfo: [NSLocalizedDescriptionKey: "SHA256 校验失败"])
+                            }
+                        }
+                        
+                        DispatchQueue.main.async {
+                            progress("正在准备安装…")
+                        }
+                        
+                        try mountAndStageInstall(dmgURL: targetURL)
+                        
+                        try? FileManager.default.removeItem(at: targetURL)
+                        
+                        DispatchQueue.main.async {
+                            completion(.success(()))
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                                NSApplication.shared.terminate(nil)
+                            }
+                        }
+                    } catch {
+                        DispatchQueue.main.async {
+                            completion(.failure(error))
+                        }
                     }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    completion(.failure(error))
                 }
             }
         }
