@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "url": "https://macapp.zhangcde.asia/downloads/MacApp.dmg",
   "releaseNotes": "Initial release of YourApp.\n\nFeatures:\n- Docker, Python, and Node.js project management\n- Terminal-based monitoring\n- Admin/sudo support for system operations\n- DMG-based updates\n- User-friendly interface",
-  "releasedAt": "2026-01-17T00:00:00Z"
+  "releasedAt": "2026-01-18T00:00:00Z"
 }

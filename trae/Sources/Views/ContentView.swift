@@ -211,6 +211,11 @@ struct ContentView: View {
             switch result {
             case .success:
                 installStatusMessage = "安装完成，正在重启…"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    if isInstallingUpdate {
+                        isInstallingUpdate = false
+                    }
+                }
             case .failure(let error):
                 isInstallingUpdate = false
                 installErrorMessage = error.localizedDescription
