@@ -12,7 +12,9 @@
       "deploy": true,
       "start": false,
       "stop": false
-    }
+    },
+    "status": "stopped",
+    "logPath": "app.log"
   },
   {
     "id": "docker-demo",
@@ -29,7 +31,9 @@
       "deploy": false,
       "start": false,
       "stop": false
-    }
+    },
+    "status": "stopped",
+    "logPath": "app.log"
   },
   {
     "id": "python-demo",
@@ -46,7 +50,9 @@
       "deploy": false,
       "start": false,
       "stop": false
-    }
+    },
+    "status": "stopped",
+    "logPath": "app.log"
   },
   {
     "id": "node-demo",
@@ -63,6 +69,8 @@
       "deploy": false,
       "start": false,
       "stop": false
-    }
+    },
+    "status": "stopped",
+    "logPath": "app.log"
   }
 ]
