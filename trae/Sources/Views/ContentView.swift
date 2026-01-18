@@ -4,7 +4,6 @@ import AppKit
 struct ContentView: View {
     private enum SidebarItem: Hashable {
         case projects
-        case logs
         case monitor
         case updates
 
@@ -12,8 +11,6 @@ struct ContentView: View {
             switch self {
             case .projects:
                 return "项目"
-            case .logs:
-                return "日志"
             case .monitor:
                 return "监控"
             case .updates:
@@ -25,8 +22,6 @@ struct ContentView: View {
             switch self {
             case .projects:
                 return "square.grid.2x2"
-            case .logs:
-                return "doc.plaintext"
             case .monitor:
                 return "waveform.path.ecg"
             case .updates:
@@ -53,8 +48,6 @@ struct ContentView: View {
             List(selection: $sidebarSelection) {
                 Label(SidebarItem.projects.title, systemImage: SidebarItem.projects.systemImage)
                     .tag(SidebarItem.projects)
-                Label(SidebarItem.logs.title, systemImage: SidebarItem.logs.systemImage)
-                    .tag(SidebarItem.logs)
                 Label(SidebarItem.monitor.title, systemImage: SidebarItem.monitor.systemImage)
                     .tag(SidebarItem.monitor)
                 Label(SidebarItem.updates.title, systemImage: SidebarItem.updates.systemImage)
@@ -66,10 +59,17 @@ struct ContentView: View {
             Group {
                 switch sidebarSelection {
                 case .projects:
-                    ProjectListView(viewModel: projectViewModel, onEdit: { project in
-                        editingProject = project
-                        isPresentingProjectEditor = true
-                    })
+                    VStack(spacing: 0) {
+                        ProjectListView(viewModel: projectViewModel, onEdit: { project in
+                            editingProject = project
+                            isPresentingProjectEditor = true
+                        })
+
+                        Divider()
+
+                        LogView(logs: $projectViewModel.logs)
+                            .frame(minHeight: 160)
+                    }
                     .navigationTitle(SidebarItem.projects.title)
                     .toolbar {
                         ToolbarItemGroup(placement: .primaryAction) {
@@ -109,9 +109,6 @@ struct ContentView: View {
                             }
                         }
                     }
-                case .logs:
-                    LogView(logs: $projectViewModel.logs)
-                        .navigationTitle(SidebarItem.logs.title)
                 case .monitor:
                     MonitorCenterView(viewModel: projectViewModel)
                         .navigationTitle(SidebarItem.monitor.title)
