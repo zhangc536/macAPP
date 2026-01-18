@@ -1,5 +1,20 @@
 [
   {
+    "id": "nexus",
+    "name": "Nexus 仓库",
+    "type": "nexus",
+    "path": "/opt/nexus",
+    "ports": [8081],
+    "scriptUrls": {
+      "deploy": "https://raw.githubusercontent.com/readyName/deploy_nodes/refs/heads/main/Nexus/deploy_nexus_for_mac.sh"
+    },
+    "needsSudo": {
+      "deploy": true,
+      "start": false,
+      "stop": false
+    }
+  },
+  {
     "id": "docker-demo",
     "name": "Docker 服务",
     "type": "docker",

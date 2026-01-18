@@ -29,6 +29,13 @@ final class ProjectRunner {
             return
         }
 
+        if action == "stop",
+           project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "nexus",
+           project.scriptUrls?["stop"] == nil {
+            stopByKeyword(project: project, keyword: "nexus", onLog: onLog)
+            return
+        }
+
         if let scriptUrl = project.scriptUrls?[action] {
             let quotedURL = shellQuote(scriptUrl)
             let scriptCommand = "bash <(curl -fsSL \(quotedURL))"
@@ -139,9 +146,15 @@ final class ProjectRunner {
 
         let matched = candidates.compactMap { url -> (url: URL, mtime: Date)? in
             let baseName = url.deletingPathExtension().lastPathComponent
-            guard baseName == project.name else { return nil }
-            let isRegular = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? true
-            guard isRegular else { return nil }
+            let normalizedBase = baseName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let name = project.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let type = project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let identifier = project.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            var keywords: [String] = []
+            if !name.isEmpty { keywords.append(name) }
+            if !type.isEmpty { keywords.append(type) }
+            if !identifier.isEmpty { keywords.append(identifier) }
+            guard keywords.contains(where: { normalizedBase.contains($0) }) else { return nil }
             let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
             return (url, mtime)
         }
@@ -161,6 +174,45 @@ final class ProjectRunner {
             onLog("已捕获启动文件：\(found.lastPathComponent)")
         }
         return found.path
+    }
+
+    private static func stopByKeyword(project: Project, keyword: String, onLog: @escaping (String) -> Void) {
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            onLog("停止失败：关键字为空")
+            return
+        }
+        let command = """
+        key=\(shellQuote(trimmed));
+        pids=$(pgrep -if "$key" || true);
+        if [ -z "$pids" ]; then
+          echo "未找到包含 $key 的进程";
+          exit 0;
+        fi;
+        echo "即将终止进程: $pids";
+        kill $pids || true;
+        sleep 2;
+        remain=$(pgrep -if "$key" || true);
+        if [ -n "$remain" ]; then
+          echo "部分进程未退出，强制结束: $remain";
+          kill -9 $remain || true;
+        fi;
+        """
+        let semaphore = DispatchSemaphore(value: 0)
+        var ok = false
+        ShellRunner.run(command: command, workingDir: nil, onOutput: { output in
+            let text = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                onLog(text)
+            }
+        }, onExit: { status in
+            ok = (status == 0)
+            semaphore.signal()
+        })
+        semaphore.wait()
+        if ok {
+            updateProjectStatus(project: project, status: "stopped")
+        }
     }
 
     private static func saveLauncherPath(projectId: String, launcherPath: String) {
