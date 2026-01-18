@@ -2,7 +2,36 @@ import SwiftUI
 import AppKit
 
 struct ContentView: View {
+    private enum SidebarItem: Hashable {
+        case projects
+        case logs
+        case updates
+
+        var title: String {
+            switch self {
+            case .projects:
+                return "项目"
+            case .logs:
+                return "日志"
+            case .updates:
+                return "更新"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .projects:
+                return "square.grid.2x2"
+            case .logs:
+                return "doc.plaintext"
+            case .updates:
+                return "arrow.down.circle"
+            }
+        }
+    }
+
     @StateObject private var projectViewModel = ProjectViewModel()
+    @State private var sidebarSelection: SidebarItem = .projects
     @State private var isCheckingUpdate = false
     @State private var updateMessage: String?
     @State private var remoteUpdate: Version?
@@ -15,74 +44,123 @@ struct ContentView: View {
     @State private var editingProject: Project?
     
     var body: some View {
-        NavigationStack {
-            ProjectListView(viewModel: projectViewModel)
-                .navigationTitle("项目管理器")
-                .toolbar {
-                    ToolbarItemGroup(placement: .primaryAction) {
-                        Button(action: {
-                            editingProject = nil
-                            isPresentingProjectEditor = true
-                        }) {
-                            Image(systemName: "plus")
-                        }
-                        Button(action: {
-                            triggerUpdateCheck()
-                        }) {
-                            if isCheckingUpdate {
-                                ProgressView()
-                            } else {
-                                Image(systemName: "arrow.down.circle")
+        NavigationSplitView {
+            List(selection: $sidebarSelection) {
+                Label(SidebarItem.projects.title, systemImage: SidebarItem.projects.systemImage)
+                    .tag(SidebarItem.projects)
+                Label(SidebarItem.logs.title, systemImage: SidebarItem.logs.systemImage)
+                    .tag(SidebarItem.logs)
+                Label(SidebarItem.updates.title, systemImage: SidebarItem.updates.systemImage)
+                    .tag(SidebarItem.updates)
+            }
+            .listStyle(.sidebar)
+            .navigationTitle("项目管理器")
+        } detail: {
+            Group {
+                switch sidebarSelection {
+                case .projects:
+                    ProjectListView(viewModel: projectViewModel, onEdit: { project in
+                        editingProject = project
+                        isPresentingProjectEditor = true
+                    })
+                    .navigationTitle(SidebarItem.projects.title)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .primaryAction) {
+                            Menu {
+                                Button("部署全部项目") {
+                                    projectViewModel.deployAllProjects()
+                                }
+                                Button("启动全部项目") {
+                                    projectViewModel.runAllProjects(action: "start")
+                                }
+                                Button("停止全部项目") {
+                                    projectViewModel.runAllProjects(action: "stop")
+                                }
+                                Divider()
+                                Button("刷新") {
+                                    projectViewModel.loadProjects()
+                                }
+                            } label: {
+                                Image(systemName: "bolt.horizontal")
+                            }
+
+                            Button {
+                                editingProject = nil
+                                isPresentingProjectEditor = true
+                            } label: {
+                                Image(systemName: "plus")
+                            }
+
+                            Button {
+                                triggerUpdateCheck()
+                            } label: {
+                                if isCheckingUpdate {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "arrow.down.circle")
+                                }
                             }
                         }
                     }
+                case .logs:
+                    LogView(logs: $projectViewModel.logs)
+                        .navigationTitle(SidebarItem.logs.title)
+                case .updates:
+                    UpdatesView(
+                        isCheckingUpdate: isCheckingUpdate,
+                        updateMessage: updateMessage,
+                        currentVersion: VersionManager.currentAppVersion(),
+                        onCheck: triggerUpdateCheck
+                    )
+                    .navigationTitle(SidebarItem.updates.title)
                 }
-                .alert(isPresented: $showUpdateAlert) {
-                    if let remote = remoteUpdate {
-                        return Alert(
-                            title: Text("发现新版本"),
-                            message: Text(updateMessage ?? ""),
-                            primaryButton: .default(Text("立即安装")) {
-                                beginInstall(remote: remote)
-                            },
-                            secondaryButton: .cancel(Text("稍后"))
-                        )
-                    } else {
-                        return Alert(
-                            title: Text("检查更新"),
-                            message: Text(updateMessage ?? ""),
-                            dismissButton: .default(Text("确定"))
-                        )
-                    }
-                }
-                .alert(isPresented: $showInstallErrorAlert) {
-                    Alert(
-                        title: Text("更新失败"),
-                        message: Text(installErrorMessage ?? ""),
+            }
+            .alert(isPresented: $showUpdateAlert) {
+                if let remote = remoteUpdate {
+                    return Alert(
+                        title: Text("发现新版本"),
+                        message: Text(updateMessage ?? ""),
+                        primaryButton: .default(Text("立即安装")) {
+                            beginInstall(remote: remote)
+                        },
+                        secondaryButton: .cancel(Text("稍后"))
+                    )
+                } else {
+                    return Alert(
+                        title: Text("检查更新"),
+                        message: Text(updateMessage ?? ""),
                         dismissButton: .default(Text("确定"))
                     )
                 }
-                .sheet(isPresented: $isInstallingUpdate) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        ProgressView()
-                        Text(installStatusMessage.isEmpty ? "处理中…" : installStatusMessage)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(24)
-                    .frame(minWidth: 420)
+            }
+            .alert(isPresented: $showInstallErrorAlert) {
+                Alert(
+                    title: Text("更新失败"),
+                    message: Text(installErrorMessage ?? ""),
+                    dismissButton: .default(Text("确定"))
+                )
+            }
+            .sheet(isPresented: $isInstallingUpdate) {
+                VStack(alignment: .leading, spacing: 16) {
+                    ProgressView()
+                    Text(installStatusMessage.isEmpty ? "处理中…" : installStatusMessage)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .sheet(isPresented: $isPresentingProjectEditor) {
-                    ProjectEditorView(project: editingProject) { project in
-                        if let existing = editingProject {
-                            if let index = projectViewModel.projects.firstIndex(where: { $0.id == existing.id }) {
-                                projectViewModel.projects[index] = project
-                                ProjectRunner.saveProjects(projectViewModel.projects)
-                            }
-                        } else {
-                            projectViewModel.addProject(project)
+                .padding(24)
+                .frame(minWidth: 420)
+            }
+            .sheet(isPresented: $isPresentingProjectEditor) {
+                ProjectEditorView(project: editingProject) { project in
+                    if let existing = editingProject {
+                        if let index = projectViewModel.projects.firstIndex(where: { $0.id == existing.id }) {
+                            projectViewModel.projects[index] = project
+                            ProjectRunner.saveProjects(projectViewModel.projects)
                         }
+                    } else {
+                        projectViewModel.addProject(project)
                     }
                 }
+            }
         }
     }
     
@@ -133,6 +211,48 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+}
+
+private struct UpdatesView: View {
+    let isCheckingUpdate: Bool
+    let updateMessage: String?
+    let currentVersion: String
+    let onCheck: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("当前版本")
+                    .font(.headline)
+                Text(currentVersion)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+
+            HStack(spacing: 12) {
+                Button("检查更新") {
+                    onCheck()
+                }
+                .buttonStyle(.borderedProminent)
+
+                if isCheckingUpdate {
+                    ProgressView()
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("检查结果")
+                    .font(.headline)
+                Text(updateMessage?.isEmpty == false ? (updateMessage ?? "") : "点击“检查更新”获取最新版本信息")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+
+            Spacer()
+        }
+        .padding(20)
+        .frame(minWidth: 640, minHeight: 420)
+    }
 }
 
 struct ProjectEditorView: View {

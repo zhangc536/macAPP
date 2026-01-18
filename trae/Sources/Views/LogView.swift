@@ -19,6 +19,7 @@ struct LogView: View {
             ScrollView {
                 Text(logs)
                     .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
                     .padding()
             }
         }
