@@ -5,6 +5,7 @@ struct ContentView: View {
     private enum SidebarItem: Hashable {
         case projects
         case logs
+        case monitor
         case updates
 
         var title: String {
@@ -13,6 +14,8 @@ struct ContentView: View {
                 return "项目"
             case .logs:
                 return "日志"
+            case .monitor:
+                return "监控"
             case .updates:
                 return "更新"
             }
@@ -24,6 +27,8 @@ struct ContentView: View {
                 return "square.grid.2x2"
             case .logs:
                 return "doc.plaintext"
+            case .monitor:
+                return "waveform.path.ecg"
             case .updates:
                 return "arrow.down.circle"
             }
@@ -50,6 +55,8 @@ struct ContentView: View {
                     .tag(SidebarItem.projects)
                 Label(SidebarItem.logs.title, systemImage: SidebarItem.logs.systemImage)
                     .tag(SidebarItem.logs)
+                Label(SidebarItem.monitor.title, systemImage: SidebarItem.monitor.systemImage)
+                    .tag(SidebarItem.monitor)
                 Label(SidebarItem.updates.title, systemImage: SidebarItem.updates.systemImage)
                     .tag(SidebarItem.updates)
             }
@@ -105,6 +112,9 @@ struct ContentView: View {
                 case .logs:
                     LogView(logs: $projectViewModel.logs)
                         .navigationTitle(SidebarItem.logs.title)
+                case .monitor:
+                    MonitorCenterView(viewModel: projectViewModel)
+                        .navigationTitle(SidebarItem.monitor.title)
                 case .updates:
                     UpdatesView(
                         isCheckingUpdate: isCheckingUpdate,
@@ -358,5 +368,63 @@ struct ProjectEditorView: View {
         }
         .padding(20)
         .frame(minWidth: 420, minHeight: 460)
+    }
+}
+
+private struct MonitorCenterView: View {
+    @ObservedObject var viewModel: ProjectViewModel
+    @State private var selectedProjectId: String = ""
+
+    private var selectedProject: Project? {
+        guard !selectedProjectId.isEmpty else {
+            return viewModel.projects.first
+        }
+        return viewModel.projects.first(where: { $0.id == selectedProjectId })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if viewModel.projects.isEmpty {
+                VStack(spacing: 8) {
+                    Text("暂无项目")
+                        .font(.title3)
+                    Text("请先在“项目”页面添加至少一个项目")
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HStack {
+                    Text("监控中心")
+                        .font(.title3)
+                    Spacer()
+                    Picker("项目", selection: $selectedProjectId) {
+                        ForEach(viewModel.projects) { project in
+                            Text(project.name)
+                                .tag(project.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 260)
+                }
+
+                Divider()
+
+                if let project = selectedProject {
+                    ProjectMonitorView(project: project)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Text("请选择要监控的项目")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 640, minHeight: 420)
+        .onAppear {
+            if selectedProjectId.isEmpty, let first = viewModel.projects.first {
+                selectedProjectId = first.id
+            }
+        }
     }
 }
