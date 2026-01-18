@@ -354,6 +354,7 @@ chmod 755 /usr/local/bin/macapp-publish.sh
 cat >/etc/systemd/system/macapp-publish.service <<UNIT
 [Unit]
 Description=Publish macOS DMG and metadata
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
@@ -368,10 +369,10 @@ UNIT
 cat >/etc/systemd/system/macapp-publish.path <<UNIT
 [Unit]
 Description=Watch DMG incoming directory
+StartLimitIntervalSec=0
 
 [Path]
 PathExistsGlob=${INCOMING_DIR%/}/*.dmg
-PathModified=${INCOMING_DIR}
 Unit=macapp-publish.service
 
 [Install]
