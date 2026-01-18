@@ -10,6 +10,11 @@ enum UpdateCheckResult {
 }
 
 final class VersionManager {
+    private struct InstallError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
     static func currentAppVersion() -> String {
         if let value = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
             return value
@@ -80,9 +85,9 @@ final class VersionManager {
         task.resume()
     }
 
-    static func downloadAndInstall(remote: Version, progress: @escaping (String) -> Void, completion: @escaping (Result<Void, String>) -> Void) {
+    static func downloadAndInstall(remote: Version, progress: @escaping (String) -> Void, completion: @escaping (Result<Void, Error>) -> Void) {
         guard let dmgURL = URL(string: remote.url) else {
-            completion(.failure("下载地址无效"))
+            completion(.failure(InstallError(message: "下载地址无效")))
             return
         }
 
@@ -92,13 +97,13 @@ final class VersionManager {
         let task = URLSession.shared.downloadTask(with: request) { tempURL, response, error in
             if let error = error {
                 DispatchQueue.main.async {
-                    completion(.failure(error.localizedDescription))
+                    completion(.failure(error))
                 }
                 return
             }
             guard let tempURL = tempURL else {
                 DispatchQueue.main.async {
-                    completion(.failure("下载失败：未生成临时文件"))
+                    completion(.failure(InstallError(message: "下载失败：未生成临时文件")))
                 }
                 return
             }
@@ -150,7 +155,7 @@ final class VersionManager {
                     }
                 } catch {
                     DispatchQueue.main.async {
-                        completion(.failure(error.localizedDescription))
+                        completion(.failure(error))
                     }
                 }
             }

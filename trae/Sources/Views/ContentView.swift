@@ -122,9 +122,9 @@ struct ContentView: View {
             switch result {
             case .success:
                 installStatusMessage = "安装完成，正在重启…"
-            case .failure(let message):
+            case .failure(let error):
                 isInstallingUpdate = false
-                installErrorMessage = message
+                installErrorMessage = error.localizedDescription
                 showInstallErrorAlert = true
             }
         })
