@@ -3,11 +3,27 @@ import Foundation
 final class ProjectRunner {
     static func run(project: Project, action: String, onLog: @escaping (String) -> Void) {
         if action == "start" {
-            guard let launcherPath = project.launcherPath, !launcherPath.isEmpty else {
-                onLog("未配置启动文件，已禁止通过 URL 启动。")
+            let launcherPath = project.launcherPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let captured = captureLauncherIfExists(project: project, onLog: onLog, logNotFound: launcherPath.isEmpty)
+            let actualLauncherPath: String
+            if let captured, !captured.isEmpty {
+                actualLauncherPath = captured
+            } else {
+                actualLauncherPath = launcherPath
+            }
+
+            if actualLauncherPath.isEmpty {
+                onLog("未找到启动文件，已禁止通过 URL 启动。")
                 return
             }
-            if openLauncher(path: launcherPath, onLog: onLog) {
+
+            if openLauncher(path: actualLauncherPath, onLog: onLog) {
+                updateProjectStatus(project: project, status: "running")
+                return
+            }
+
+            if let recaptured = captureLauncherIfExists(project: project, onLog: onLog, logNotFound: true),
+               openLauncher(path: recaptured, onLog: onLog) {
                 updateProjectStatus(project: project, status: "running")
             }
             return
@@ -20,6 +36,13 @@ final class ProjectRunner {
             // 判断是否需要sudo权限
             let needSudo = project.needsSudo?[action] ?? false
 
+            if action == "deploy", (project.launcherPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty {
+                if let captured = captureLauncherIfExists(project: project, onLog: onLog, logNotFound: false) {
+                    onLog("检测到已存在启动文件，跳过部署：\(URL(fileURLWithPath: captured).lastPathComponent)")
+                    return
+                }
+            }
+
             if action == "deploy", needSudo {
                 onLog("部署前检查 Homebrew…")
                 guard ensureHomebrewInstalled(onLog: onLog) else {
@@ -31,7 +54,7 @@ final class ProjectRunner {
                 AdminRunner.run(command: scriptCommand, onOutput: onLog, onExit: { status in
                     onLog("部署完成，退出码: \(status)")
                     if status == 0 {
-                        captureLauncherAfterDeploy(project: project, onLog: onLog)
+                        _ = captureLauncherIfExists(project: project, onLog: onLog, logNotFound: false)
                     }
                 })
                 return
@@ -59,7 +82,7 @@ final class ProjectRunner {
                     if status == 0 {
                         updateProjectStatus(project: project, status: action == "stop" ? "stopped" : "running")
                         if action == "deploy" {
-                            captureLauncherAfterDeploy(project: project, onLog: onLog)
+                            _ = captureLauncherIfExists(project: project, onLog: onLog, logNotFound: false)
                         }
                     }
                 })
@@ -96,10 +119,10 @@ final class ProjectRunner {
         return ok
     }
 
-    private static func captureLauncherAfterDeploy(project: Project, onLog: @escaping (String) -> Void) {
+    private static func captureLauncherIfExists(project: Project, onLog: @escaping (String) -> Void, logNotFound: Bool) -> String? {
         guard let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first else {
             onLog("未能获取桌面目录，无法捕获启动文件。")
-            return
+            return nil
         }
 
         let candidates: [URL]
@@ -111,7 +134,7 @@ final class ProjectRunner {
             )
         } catch {
             onLog("读取桌面目录失败：\(error.localizedDescription)")
-            return
+            return nil
         }
 
         let matched = candidates.compactMap { url -> (url: URL, mtime: Date)? in
@@ -126,12 +149,18 @@ final class ProjectRunner {
         .first
 
         guard let found = matched?.url else {
-            onLog("未在桌面找到启动文件：\(project.name)(.*)")
-            return
+            if logNotFound {
+                onLog("未在桌面找到启动文件：\(project.name)(.*)")
+            }
+            return nil
         }
 
-        saveLauncherPath(projectId: project.id, launcherPath: found.path)
-        onLog("已捕获启动文件：\(found.lastPathComponent)")
+        let current = project.launcherPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if current != found.path {
+            saveLauncherPath(projectId: project.id, launcherPath: found.path)
+            onLog("已捕获启动文件：\(found.lastPathComponent)")
+        }
+        return found.path
     }
 
     private static func saveLauncherPath(projectId: String, launcherPath: String) {
