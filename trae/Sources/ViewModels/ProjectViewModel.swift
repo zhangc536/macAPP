@@ -11,9 +11,10 @@ class ProjectViewModel: ObservableObject {
     
     func loadProjects() {
         projects = ProjectRunner.loadProjects()
-        // 检查每个项目的状态
         projects.forEach { project in
-            checkProjectStatus(project)
+            DispatchQueue.global(qos: .background).async {
+                self.checkProjectStatus(project)
+            }
         }
     }
     

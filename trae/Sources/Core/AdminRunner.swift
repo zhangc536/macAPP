@@ -13,14 +13,18 @@ final class AdminRunner {
         let fileHandle = pipe.fileHandleForReading
         fileHandle.readabilityHandler = { fileHandle in
             if let data = try? fileHandle.readToEnd(), let output = String(data: data, encoding: .utf8) {
-                onOutput(output)
+                if !output.isEmpty {
+                    onOutput(output)
+                }
             }
+        }
+        
+        task.terminationHandler = { task in
+            onExit(task.terminationStatus)
         }
         
         do {
             try task.run()
-            task.waitUntilExit()
-            onExit(task.terminationStatus)
         } catch {
             onOutput("Admin Error: \(error)")
             onExit(1)
