@@ -313,19 +313,14 @@ final class ProjectRunner {
             return
         }
         
-        // 检查端口是否被占用
-        if let port = project.ports.first {
-            let isInUse = Monitor.checkPortInUse(port)
-            if isInUse {
-                status = "running"
-            }
-        }
-        
-        // 检查进程是否在运行
         let processes = Monitor.listRunningProcesses(project)
-        if !processes.isEmpty {
+        let runningLines = processes.filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !trimmed.isEmpty
+        }
+        if !runningLines.isEmpty {
             status = "running"
-            if let firstProcess = processes.first {
+            if let firstProcess = runningLines.first {
                 let parts = firstProcess
                     .components(separatedBy: .whitespaces)
                     .filter { !$0.isEmpty }

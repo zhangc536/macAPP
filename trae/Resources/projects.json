@@ -1,10 +1,8 @@
 [
   {
     "id": "nexus",
-    "name": "Nexus 仓库",
+    "name": "nexus",
     "type": "nexus",
-    "path": "/opt/nexus",
-    "ports": [8081],
     "scriptUrls": {
       "deploy": "https://raw.githubusercontent.com/readyName/deploy_nodes/refs/heads/main/Nexus/deploy_nexus_for_mac.sh"
     },

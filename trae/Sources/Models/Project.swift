@@ -4,8 +4,8 @@ struct Project: Codable, Identifiable {
     var id: String
     var name: String
     var type: String
-    var path: String
-    var ports: [Int]
+    var path: String?
+    var ports: [Int]?
     var scripts: [String: String]?
     var scriptUrls: [String: String]?
     var launcherPath: String?

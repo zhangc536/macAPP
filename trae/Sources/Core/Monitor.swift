@@ -57,7 +57,9 @@ final class Monitor {
     }
 
     static func openTerminalForProject(_ project: Project) {
-        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Monitoring \(project.name) ===\"\"' -e 'activate' -e 'end tell'"
+        let basePath = project.path ?? ""
+        let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "
+        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"\(cdPart)echo \"=== Monitoring \(project.name) ===\"\"' -e 'activate' -e 'end tell'"
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
@@ -69,19 +71,23 @@ final class Monitor {
         }
 
         let actualLogPath = logPath ?? project.logPath
-        let fullLogPath = "\(project.path)/\(actualLogPath)"
-        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Log Monitoring - \(project.name) ===\"; tail -f \(fullLogPath)\"' -e 'activate' -e 'end tell'"
+        let basePath = project.path ?? ""
+        let fullLogPath = basePath.isEmpty ? actualLogPath : "\(basePath)/\(actualLogPath)"
+        let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "
+        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"\(cdPart)echo \"=== Log Monitoring - \(project.name) ===\"; tail -f \(fullLogPath)\"' -e 'activate' -e 'end tell'"
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorPort(_ project: Project, port: Int? = nil) {
-        let actualPort = port ?? project.ports.first ?? 0
+        let actualPort = port ?? (project.ports?.first ?? 0)
         if isDockerProject(project), let container = resolveDockerContainer(project) {
             let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Port - \(project.name) ===; while true; do docker port \(shellQuote(container)) 2>/dev/null || echo 容器未运行或不存在; echo; echo Host lsof :\(actualPort); lsof -i :\(actualPort) 2>/dev/null || echo Not listening; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
             ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
             return
         }
-        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Port \(actualPort) Monitoring - \(project.name) ===\"; while true; do lsof -i :\(actualPort); sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
+        let basePath = project.path ?? ""
+        let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "
+        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"\(cdPart)echo \"=== Port \(actualPort) Monitoring - \(project.name) ===\"; while true; do lsof -i :\(actualPort); sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
@@ -95,39 +101,49 @@ final class Monitor {
         guard let actualPid = pid ?? project.pid else {
             return
         }
-        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Process \(actualPid) Monitoring - \(project.name) ===\"; while true; do ps -p \(actualPid) -o %cpu,%mem,command; sleep 1; clear; done\"' -e 'activate' -e 'end tell'"
+        let basePath = project.path ?? ""
+        let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "
+        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"\(cdPart)echo \"=== Process \(actualPid) Monitoring - \(project.name) ===\"; while true; do ps -p \(actualPid) -o %cpu,%mem,command; sleep 1; clear; done\"' -e 'activate' -e 'end tell'"
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorProject(_ project: Project) {
         if isDockerProject(project), let container = resolveDockerContainer(project) {
-            let actualPort = project.ports.first ?? 0
+            let actualPort = project.ports?.first ?? 0
             let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Comprehensive - \(project.name) ===; while true; do echo [$(date +%H:%M:%S)] Container: \(container); docker inspect -f 'Status: {{.State.Status}}  Running: {{.State.Running}}  StartedAt: {{.State.StartedAt}}' \(shellQuote(container)) 2>/dev/null || echo 容器不存在; echo; docker stats --no-stream --format 'table {{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}\\t{{.NetIO}}\\t{{.BlockIO}}' \(shellQuote(container)) 2>/dev/null || true; echo; echo Ports:; docker port \(shellQuote(container)) 2>/dev/null || true; echo; echo Host lsof :\(actualPort); lsof -i :\(actualPort) 2>/dev/null || echo Not listening; echo; echo Top:; docker top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null || true; echo; echo Logs (tail 50):; docker logs --tail 50 \(shellQuote(container)) 2>/dev/null || true; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
             ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
             return
         }
 
         // 综合监控：进程、端口、日志
-        let port = project.ports.first ?? 0
+        let port = project.ports?.first ?? 0
         let logPath = project.logPath
-        let fullLogPath = "\(project.path)/\(logPath)"
+        let basePath = project.path ?? ""
+        let fullLogPath = basePath.isEmpty ? logPath : "\(basePath)/\(logPath)"
         
-        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Comprehensive Monitoring - \(project.name) ===\"; while true; do echo \"[$(date +%H:%M:%S)] Process: \"; if [ -n \"\(project.pid ?? 0)\" ]; then ps -p \(project.pid ?? 0) -o %cpu,%mem,command; else echo \"Not running\"; fi; echo; echo \"Port: \(port): \"; lsof -i :\(port) 2>/dev/null || echo \"Not listening\"; echo; echo \"Recent Logs (last 5 lines): \"; tail -n 5 \(fullLogPath) 2>/dev/null || echo \"Log file not found\"; echo; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
+        let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "
+        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"\(cdPart)echo \"=== Comprehensive Monitoring - \(project.name) ===\"; while true; do echo \"[$(date +%H:%M:%S)] Process: \"; if [ -n \"\(project.pid ?? 0)\" ]; then ps -p \(project.pid ?? 0) -o %cpu,%mem,command; else echo \"Not running\"; fi; echo; echo \"Port: \(port): \"; lsof -i :\(port) 2>/dev/null || echo \"Not listening\"; echo; echo \"Recent Logs (last 5 lines): \"; tail -n 5 \(fullLogPath) 2>/dev/null || echo \"Log file not found\"; echo; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorDirectory(_ project: Project, directory: String = ".") {
-        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Directory Monitoring - \(project.name) ===\"; watch -n 1 ls -la \(directory)\"' -e 'activate' -e 'end tell'"
+        let basePath = project.path ?? ""
+        let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "
+        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"\(cdPart)echo \"=== Directory Monitoring - \(project.name) ===\"; watch -n 1 ls -la \(directory)\"' -e 'activate' -e 'end tell'"
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func monitorNetwork(_ project: Project) {
-        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== Network Monitoring - \(project.name) ===\"; while true; do echo \"Listening Ports: \"; netstat -an | grep LISTEN; sleep 3; clear; done\"' -e 'activate' -e 'end tell'"
+        let basePath = project.path ?? ""
+        let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "
+        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"\(cdPart)echo \"=== Network Monitoring - \(project.name) ===\"; while true; do echo \"Listening Ports: \"; netstat -an | grep LISTEN; sleep 3; clear; done\"' -e 'activate' -e 'end tell'"
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
     static func customMonitor(_ project: Project, command: String, title: String) {
-        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"cd \(project.path); echo \"=== \(title) - \(project.name) ===\"; \(command)\"' -e 'activate' -e 'end tell'"
+        let basePath = project.path ?? ""
+        let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "
+        let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"\(cdPart)echo \"=== \(title) - \(project.name) ===\"; \(command)\"' -e 'activate' -e 'end tell'"
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
@@ -190,16 +206,23 @@ final class Monitor {
             return cleaned
         }
 
+        guard let pid = project.pid, pid > 0 else {
+            return []
+        }
+
         var processes: [String] = []
         let semaphore = DispatchSemaphore(value: 0)
-        
-        let script = "ps aux | grep \"\(project.path)\" | grep -v grep"
+
+        let script = "ps -p \(pid) -o pid,ppid,command 2>/dev/null | sed '1d'"
+
         ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
-            processes = output.components(separatedBy: "\n").filter { !$0.isEmpty }
+            processes = output
+                .components(separatedBy: "\n")
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         }, onExit: { _ in
             semaphore.signal()
         })
-        
+
         semaphore.wait()
         return processes
     }
@@ -223,7 +246,10 @@ final class Monitor {
             return trimmed.isEmpty ? "暂无日志或容器未运行" : trimmed
         }
 
-        let path = "\(project.path)/\(project.logPath)"
+        guard let basePath = project.path, !basePath.isEmpty else {
+            return "未配置项目路径"
+        }
+        let path = "\(basePath)/\(project.logPath)"
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
             return "未找到日志文件"
         }
@@ -233,7 +259,7 @@ final class Monitor {
     }
 
     static func portStatusText(_ project: Project) -> String {
-        guard let port = project.ports.first else {
+        guard let port = project.ports?.first else {
             return "未配置端口"
         }
         if isDockerProject(project) {

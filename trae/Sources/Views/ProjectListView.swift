@@ -99,7 +99,7 @@ struct ProjectListView: View {
         return viewModel.projects.filter { project in
             project.name.lowercased().contains(q)
             || project.type.lowercased().contains(q)
-            || project.path.lowercased().contains(q)
+            || (project.path ?? "").lowercased().contains(q)
         }
     }
 
@@ -126,7 +126,7 @@ private struct ProjectRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(project.name)
                     .lineLimit(1)
-                Text("\(project.type)  •  \(project.ports.map(String.init).joined(separator: ", "))")
+                Text("\(project.type)  •  \((project.ports ?? []).map(String.init).joined(separator: ", "))")
                     .font(.footnote)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -172,8 +172,8 @@ private struct ProjectDetail: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     LabeledContent("类型", value: project.type)
-                    LabeledContent("路径", value: project.path)
-                    if let firstPort = project.ports.first {
+                    LabeledContent("路径", value: project.path ?? "未配置")
+                    if let firstPort = project.ports?.first {
                         LabeledContent("端口", value: String(firstPort))
                     } else {
                         LabeledContent("端口", value: "未配置")
@@ -221,7 +221,6 @@ private struct ProjectDetail: View {
 
 final class ProjectMonitorViewModel: ObservableObject {
     @Published var logText: String = ""
-    @Published var portStatus: String = ""
     @Published var processes: [String] = []
     
     private let project: Project
@@ -250,11 +249,9 @@ final class ProjectMonitorViewModel: ObservableObject {
         DispatchQueue.global().async { [weak self] in
             guard let self = self else { return }
             let logText = self.readLog()
-            let portStatus = self.checkPort()
             let processes = Monitor.listRunningProcesses(self.project)
             DispatchQueue.main.async {
                 self.logText = logText
-                self.portStatus = portStatus
                 self.processes = processes
             }
         }
@@ -262,10 +259,6 @@ final class ProjectMonitorViewModel: ObservableObject {
     
     private func readLog() -> String {
         Monitor.readRecentLogs(project, tail: 200)
-    }
-    
-    private func checkPort() -> String {
-        Monitor.portStatusText(project)
     }
 }
 
@@ -283,24 +276,14 @@ struct ProjectMonitorView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(project.name)
                     .font(.title2)
-                Text(project.path)
+                Text(project.path ?? "未配置路径")
                     .font(.subheadline)
                     .foregroundColor(.gray)
-                if let port = project.ports.first {
+                if let port = project.ports?.first {
                     Text("端口：\(port)")
                         .font(.subheadline)
                         .foregroundColor(.gray)
                 }
-            }
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("端口状态")
-                    .font(.headline)
-                Text(viewModel.portStatus)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             
             Divider()
