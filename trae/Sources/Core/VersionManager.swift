@@ -86,7 +86,8 @@ final class VersionManager {
     }
 
     static func downloadAndInstall(remote: Version, progress: @escaping (String) -> Void, completion: @escaping (Result<Void, Error>) -> Void) {
-        guard let dmgURL = URL(string: remote.url) else {
+        let cleanedURLString = normalizedURLString(remote.url)
+        guard let dmgURL = URL(string: cleanedURLString) else {
             completion(.failure(InstallError(message: "下载地址无效")))
             return
         }
@@ -101,6 +102,15 @@ final class VersionManager {
                 }
                 return
             }
+
+            if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                let message = "下载失败：服务器返回状态码 \(httpResponse.statusCode)"
+                DispatchQueue.main.async {
+                    completion(.failure(InstallError(message: message)))
+                }
+                return
+            }
+
             guard let tempURL = tempURL else {
                 DispatchQueue.main.async {
                     completion(.failure(InstallError(message: "下载失败：未生成临时文件")))
@@ -134,7 +144,7 @@ final class VersionManager {
                         }
                     }
 
-                    if let expectedSHA256 = remote.sha256?.trimmingCharacters(in: .whitespacesAndNewlines), !expectedSHA256.isEmpty {
+                    if let expectedSHA256 = remote.sha256?.trimmingCharacters(in: shaTrimCharacters), !expectedSHA256.isEmpty {
                         let actual = try sha256Hex(of: targetURL)
                         if actual.lowercased() != expectedSHA256.lowercased() {
                             throw NSError(domain: "Update", code: 3, userInfo: [NSLocalizedDescriptionKey: "SHA256 校验失败"])
@@ -146,6 +156,8 @@ final class VersionManager {
                     }
 
                     try mountAndStageInstall(dmgURL: targetURL)
+
+                    try? FileManager.default.removeItem(at: targetURL)
 
                     DispatchQueue.main.async {
                         completion(.success(()))
@@ -164,7 +176,8 @@ final class VersionManager {
     }
     
     private static func makeMetadataURL(from urlString: String) -> URL? {
-        guard var components = URLComponents(string: urlString) else {
+        let cleaned = normalizedURLString(urlString)
+        guard var components = URLComponents(string: cleaned) else {
             return nil
         }
         if let last = components.path.split(separator: ".").last, last == "dmg" {
@@ -289,6 +302,13 @@ final class VersionManager {
 
     private static func shQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static let urlTrimCharacters = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "`'\""))
+    private static let shaTrimCharacters = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "`\""))
+
+    private static func normalizedURLString(_ raw: String) -> String {
+        raw.trimmingCharacters(in: urlTrimCharacters)
     }
     
     private static func compareVersion(_ lhs: String, _ rhs: String) -> Int {
