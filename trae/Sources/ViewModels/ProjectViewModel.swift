@@ -35,6 +35,9 @@ class ProjectViewModel: ObservableObject {
                 self.addLog(log)
             }
         }
+        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 2.0) {
+            self.checkProjectStatus(project)
+        }
     }
     
     func stopProject(_ project: Project) {
@@ -44,6 +47,9 @@ class ProjectViewModel: ObservableObject {
                 self.addLog(log)
             }
         }
+        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 2.0) {
+            self.checkProjectStatus(project)
+        }
     }
     
     func deployProject(_ project: Project) {
@@ -52,6 +58,9 @@ class ProjectViewModel: ObservableObject {
             DispatchQueue.main.async {
                 self.addLog(log)
             }
+        }
+        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 3.0) {
+            self.checkProjectStatus(project)
         }
     }
     
