@@ -4,7 +4,8 @@
 
 # 配置
 APP_NAME="MacApp"
-VERSION="1.1.7"
+BINARY_NAME="YourApp"
+VERSION="1.1.8"
 BUNDLE_ID="com.yourapp.YourApp"
 
 # 清理旧构建产物
@@ -31,10 +32,10 @@ mkdir -p build/$APP_NAME.app/Contents/Resources/scripts
 echo "Copying built executable..."
 
 EXEC_SRC=""
-if [ -f ".build/apple/Products/Release/$APP_NAME" ]; then
-    EXEC_SRC=".build/apple/Products/Release/$APP_NAME"
-elif [ -f ".build/release/$APP_NAME" ]; then
-    EXEC_SRC=".build/release/$APP_NAME"
+if [ -f ".build/apple/Products/Release/$BINARY_NAME" ]; then
+    EXEC_SRC=".build/apple/Products/Release/$BINARY_NAME"
+elif [ -f ".build/release/$BINARY_NAME" ]; then
+    EXEC_SRC=".build/release/$BINARY_NAME"
 else
     echo "❌ Cannot find built executable for $APP_NAME"
     ls -R .build || true
