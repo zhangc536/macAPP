@@ -206,22 +206,45 @@ final class Monitor {
             return cleaned
         }
 
-        guard let pid = project.pid, pid > 0 else {
-            return []
-        }
-
         var processes: [String] = []
         let semaphore = DispatchSemaphore(value: 0)
 
-        let script = "ps -p \(pid) -o pid,ppid,command 2>/dev/null | sed '1d'"
+        if let pid = project.pid, pid > 0 {
+            let script = "ps -p \(pid) -o pid,ppid,command 2>/dev/null | sed '1d'"
 
-        ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
-            processes = output
-                .components(separatedBy: "\n")
-                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        }, onExit: { _ in
-            semaphore.signal()
-        })
+            ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
+                processes = output
+                    .components(separatedBy: "\n")
+                    .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            }, onExit: { _ in
+                semaphore.signal()
+            })
+        } else {
+            let candidates = [project.id, project.name, project.type]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard let keyword = candidates.first else {
+                return []
+            }
+
+            let script = """
+            key=\(shellQuote(keyword));
+            pids=$(pgrep -if "$key" || true);
+            if [ -z "$pids" ]; then
+              exit 0;
+            fi;
+            ps -p $pids -o pid,ppid,command 2>/dev/null | sed '1d'
+            """
+
+            ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
+                processes = output
+                    .components(separatedBy: .newlines)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }, onExit: { _ in
+                semaphore.signal()
+            })
+        }
 
         semaphore.wait()
         return processes

@@ -4,7 +4,7 @@
 
 # 配置
 APP_NAME="YourApp"
-VERSION="1.1.6"
+VERSION="1.1.7"
 BUNDLE_ID="com.yourapp.YourApp"
 
 # 清理旧构建产物
