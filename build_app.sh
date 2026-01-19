@@ -3,7 +3,7 @@
 # 编译脚本 - 用于构建和打包 macOS 应用
 
 # 配置
-APP_NAME="YourApp"
+APP_NAME="MacApp"
 VERSION="1.1.7"
 BUNDLE_ID="com.yourapp.YourApp"
 

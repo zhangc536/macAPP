@@ -3,7 +3,7 @@
 # DMG 打包脚本 - 用于创建 macOS 应用安装包
 
 # 配置
-APP_NAME="YourApp"
+APP_NAME="MacApp"
 VERSION="1.1.7"
 DMG_NAME="MacApp"
 

@@ -292,12 +292,20 @@ final class VersionManager {
         }
 
         let enumerator = FileManager.default.enumerator(at: mountPoint, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
+        var firstApp: URL?
         while let url = enumerator?.nextObject() as? URL {
-            if url.pathExtension == "app", url.lastPathComponent == expectedName {
+            guard url.pathExtension == "app" else { continue }
+            if firstApp == nil {
+                firstApp = url
+            }
+            if url.lastPathComponent == expectedName {
                 return url
             }
         }
-        throw NSError(domain: "Update", code: 12, userInfo: [NSLocalizedDescriptionKey: "未在 DMG 中找到 \(expectedName)"])
+        if let firstApp {
+            return firstApp
+        }
+        throw NSError(domain: "Update", code: 12, userInfo: [NSLocalizedDescriptionKey: "未在 DMG 中找到应用包"])
     }
 
     private static func runProcess(executable: String, arguments: [String]) -> (status: Int32, output: String) {
