@@ -207,34 +207,10 @@ final class Monitor {
         }
 
         var processes: [String] = []
-        let semaphore = DispatchSemaphore(value: 0)
 
         if let pid = project.pid, pid > 0 {
+            let semaphore = DispatchSemaphore(value: 0)
             let script = "ps -p \(pid) -o pid,ppid,command 2>/dev/null | sed '1d'"
-
-            ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
-                processes = output
-                    .components(separatedBy: "\n")
-                    .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            }, onExit: { _ in
-                semaphore.signal()
-            })
-        } else {
-            let candidates = [project.id, project.name, project.type]
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            guard let keyword = candidates.first else {
-                return []
-            }
-
-            let script = """
-            key=\(shellQuote(keyword));
-            pids=$(pgrep -if "$key" || true);
-            if [ -z "$pids" ]; then
-              exit 0;
-            fi;
-            ps -p $pids -o pid,ppid,command 2>/dev/null | sed '1d'
-            """
 
             ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
                 processes = output
@@ -244,9 +220,57 @@ final class Monitor {
             }, onExit: { _ in
                 semaphore.signal()
             })
+            semaphore.wait()
+            return processes
         }
 
-        semaphore.wait()
+        var candidates = [project.id, project.name, project.type]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "nexus" {
+            candidates.append("nexus-network")
+        }
+
+        guard !candidates.isEmpty else {
+            return []
+        }
+
+        for keyword in candidates {
+            let semaphore = DispatchSemaphore(value: 0)
+            var current: [String] = []
+
+            let script = """
+            key=\(shellQuote(keyword));
+            if command -v pgrep >/dev/null 2>&1; then
+              pids=$(pgrep -if "$key" || true);
+            else
+              pids="";
+            fi;
+            if [ -n "$pids" ]; then
+              ps -p $pids -o pid,ppid,command 2>/dev/null | sed '1d'
+            else
+              ps -axo pid,ppid,command 2>/dev/null | grep -i "$key" | grep -v grep || true
+            fi
+            """
+
+            ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
+                current = output
+                    .components(separatedBy: .newlines)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }, onExit: { _ in
+                semaphore.signal()
+            })
+
+            semaphore.wait()
+
+            if !current.isEmpty {
+                processes = current
+                break
+            }
+        }
+
         return processes
     }
 
