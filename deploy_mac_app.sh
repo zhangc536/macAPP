@@ -240,76 +240,31 @@ if matches:
 PY
 }
 
-version_from_dmg() {
-  local dmg_path="$1"
-  local tmp_dir img img_out
-  tmp_dir="$(mktemp -d -t macapp_dmg.XXXXXX)"
-  img="$tmp_dir/disk.img"
-  img_out="$tmp_dir/img"
-  mkdir -p "$img_out"
-
-  cleanup() {
-    rm -rf "$tmp_dir" >/dev/null 2>&1 || true
-  }
-  trap cleanup RETURN
-
-  if command -v dmg2img >/dev/null 2>&1 && command -v 7z >/dev/null 2>&1; then
-    dmg2img "$dmg_path" "$img" >/dev/null 2>&1 || true
-    if [[ -f "$img" ]]; then
-      7z x -y -o"$img_out" "$img" >/dev/null 2>&1 || true
-      python3 - "$img_out" <<'PY'
+version_from_zip() {
+  local zip_path="$1"
+  python3 - "$zip_path" <<'PY'
 import os
 import plistlib
 import sys
+import zipfile
 
-root = sys.argv[1]
-candidates = []
-for base, _, files in os.walk(root):
-    if "Info.plist" in files and ".app/Contents" in base.replace("\\", "/"):
-        candidates.append(os.path.join(base, "Info.plist"))
+zip_path = sys.argv[1]
 
-for path in sorted(candidates, key=len):
-    try:
-        with open(path, "rb") as f:
-            plist = plistlib.load(f)
-        v = plist.get("CFBundleShortVersionString") or plist.get("CFBundleVersion")
-        if isinstance(v, str) and v.strip():
-            print(v.strip())
-            break
-    except Exception:
-        continue
-PY
-      return 0
-    fi
-  fi
-
-  if ! command -v 7z >/dev/null 2>&1; then
-    return 1
-  fi
-
-  7z x -y -o"$tmp_dir" "$dmg_path" >/dev/null 2>&1 || return 1
-
-  python3 - "$tmp_dir" <<'PY'
-import os
-import plistlib
-import sys
-
-root = sys.argv[1]
-candidates = []
-for base, _, files in os.walk(root):
-    if "Info.plist" in files and ".app/Contents" in base.replace("\\", "/"):
-        candidates.append(os.path.join(base, "Info.plist"))
-
-for path in sorted(candidates, key=len):
-    try:
-        with open(path, "rb") as f:
-            plist = plistlib.load(f)
-        v = plist.get("CFBundleShortVersionString") or plist.get("CFBundleVersion")
-        if isinstance(v, str) and v.strip():
-            print(v.strip())
-            break
-    except Exception:
-        continue
+try:
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        candidate_infos = [n for n in zf.namelist() if n.endswith("Info.plist") and ".app/Contents/" in n]
+        for name in sorted(candidate_infos, key=len):
+            try:
+                with zf.open(name) as f:
+                    plist = plistlib.load(f)
+                v = plist.get("CFBundleShortVersionString") or plist.get("CFBundleVersion")
+                if isinstance(v, str) and v.strip():
+                    print(v.strip())
+                    break
+            except Exception:
+                continue
+except Exception:
+    pass
 PY
 }
 
@@ -331,18 +286,47 @@ if [[ -z "$dmg_path" ]]; then
   exit 0
 fi
 
+work_dir="$(mktemp -d "${INCOMING_DIR%/}/.publish_tmp_XXXXXX")"
+cleanup() {
+  set +e
+  rm -rf "$work_dir"
+}
+trap cleanup EXIT
+
+extract_dir="$work_dir/extracted"
+mkdir -p "$extract_dir"
+7z x "$dmg_path" -o"$extract_dir" >/dev/null || true
+
+app_src="$(find "$extract_dir" -maxdepth 10 -type d -name "${APP_NAME}.app" | head -n 1 || true)"
+if [[ -z "$app_src" ]]; then
+  app_src="$(find "$extract_dir" -maxdepth 10 -type d -name "*.app" | head -n 1 || true)"
+fi
+if [[ -z "$app_src" ]]; then
+  exit 1
+fi
+
+base="$(basename "$dmg_path")"
+base="${base%.dmg}"
+zip_path="${INCOMING_DIR%/}/$base.zip"
+tmp_zip="$work_dir/${base}.zip"
+(
+  cd "$(dirname "$app_src")"
+  7z a -tzip "$tmp_zip" "$(basename "$app_src")" >/dev/null
+)
+mv -f "$tmp_zip" "$zip_path"
+
 mkdir -p "$PUBLISH_DIR"
 
-current_hash="$(sha256_of_file "$dmg_path")"
+current_hash="$(sha256_of_file "$zip_path")"
 
-stem="$(basename "$dmg_path")"
-stem="${stem%.dmg}"
+stem="$(basename "$zip_path")"
+stem="${stem%.zip}"
 version="$(extract_version "$stem" || true)"
 if [[ -z "$version" ]]; then
-  version="$(version_from_dmg "$dmg_path" || true)"
+  version="$(version_from_zip "$zip_path" || true)"
 fi
 if [[ -z "$version" ]]; then
-  version="$(mtime_version "$dmg_path" || true)"
+  version="$(mtime_version "$zip_path" || true)"
 fi
 if [[ -z "$version" ]]; then
   version="$(date -u +"%Y.%m.%d.%H%M%S")"
@@ -372,30 +356,32 @@ if [[ -f "$signature_file" ]]; then
 fi
 
 released_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-url="https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/${APP_NAME}.dmg"
-size_bytes="$(stat -c %s "$dmg_path" 2>/dev/null || wc -c <"$dmg_path" | tr -d ' ')"
+filename="$(basename "$zip_path")"
+url="https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/$filename"
+size_bytes="$(stat -c %s "$zip_path" 2>/dev/null || wc -c <"$zip_path" | tr -d ' ')"
 
-tmp_dmg="${PUBLISH_DIR%/}/${APP_NAME}.dmg.part"
-cp -f "$dmg_path" "$tmp_dmg"
-mv -f "$tmp_dmg" "${PUBLISH_DIR%/}/${APP_NAME}.dmg"
+tmp_zip="${PUBLISH_DIR%/}/$filename.part"
+cp -f "$zip_path" "$tmp_zip"
+mv -f "$tmp_zip" "${PUBLISH_DIR%/}/$filename"
 
-python3 - "$version" "$url" "$current_hash" "$size_bytes" "$notes" "$released_at" >"${PUBLISH_DIR%/}/${APP_NAME}.json.part" <<'PY'
+python3 - "$version" "$url" "$current_hash" "$notes" "$released_at" >"${PUBLISH_DIR%/}/update.json.part" <<'PY'
 import json
 import sys
 
-version, url, sha256, size, release_notes, released_at = sys.argv[1:7]
+version, url, sha256, release_notes, released_at = sys.argv[1:6]
 url = url.strip().strip("`").strip()
 payload = {
-    "version": version,
-    "url": url,
-    "sha256": sha256,
-    "size": int(size) if str(size).isdigit() else None,
-    "releaseNotes": release_notes,
-    "releasedAt": released_at,
+    "latest_version": version,
+    "release_notes": release_notes,
+    "released_at": released_at,
+    "mac": {
+        "url": url,
+        "sha256": sha256,
+    },
 }
 sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 PY
-mv -f "${PUBLISH_DIR%/}/${APP_NAME}.json.part" "${PUBLISH_DIR%/}/${APP_NAME}.json"
+mv -f "${PUBLISH_DIR%/}/update.json.part" "${PUBLISH_DIR%/}/update.json"
 
 echo "$signature" >"$signature_file"
 PUBLISH
@@ -404,7 +390,7 @@ chmod 755 /usr/local/bin/macapp-publish.sh
 
 cat >/etc/systemd/system/macapp-publish.service <<UNIT
 [Unit]
-Description=Publish macOS DMG and metadata
+Description=Publish macOS zip and update metadata
 StartLimitIntervalSec=0
 
 [Service]
@@ -440,5 +426,5 @@ systemctl start certbot.timer >/dev/null 2>&1 || true
 echo "OK"
 echo "INCOMING_DIR=${INCOMING_DIR}"
 echo "PUBLISH_DIR=${PUBLISH_DIR}"
-echo "URL=https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/${APP_NAME}.dmg"
-echo "META=https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/${APP_NAME}.json"
+echo "URL=https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/*.zip"
+echo "META=https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/update.json"

@@ -5,7 +5,7 @@
 # 配置
 APP_NAME="MacApp"
 BINARY_NAME="YourApp"
-VERSION="1.1.9"
+VERSION="1.2.0"
 BUNDLE_ID="com.yourapp.YourApp"
 
 # 清理旧构建产物
@@ -47,6 +47,31 @@ cp "$EXEC_SRC" "build/$APP_NAME.app/Contents/MacOS/$APP_NAME"
 # 复制资源文件
 echo "Copying resources..."
 cp -r trae/Resources/* build/$APP_NAME.app/Contents/Resources/
+
+echo "Creating Updater helper..."
+mkdir -p build/$APP_NAME.app/Contents/Helpers
+cat > build/$APP_NAME.app/Contents/Helpers/Updater << EOF
+#!/bin/bash
+ZIP="\$1"
+APP_NAME="$APP_NAME.app"
+INSTALL_DIR="\$HOME/Applications"
+TARGET="\$INSTALL_DIR/\$APP_NAME"
+BACKUP="\$INSTALL_DIR/\$APP_NAME.bak"
+
+sleep 2
+
+mkdir -p "\$INSTALL_DIR"
+
+if [ -d "\$TARGET" ]; then
+  rm -rf "\$BACKUP"
+  mv "\$TARGET" "\$BACKUP"
+fi
+
+unzip -oq "\$ZIP" -d "\$INSTALL_DIR"
+
+open "\$TARGET"
+EOF
+chmod +x build/$APP_NAME.app/Contents/Helpers/Updater
 
 # 创建 Info.plist
 echo "Creating Info.plist..."
