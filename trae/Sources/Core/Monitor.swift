@@ -206,9 +206,38 @@ final class Monitor {
             return cleaned
         }
 
-        var processes: [String] = []
+        let lowerType = project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        if lowerType == "nexus" {
+            var processes: [String] = []
+            let semaphore = DispatchSemaphore(value: 0)
+            let script = """
+            if command -v pgrep >/dev/null 2>&1; then
+              pids=$(pgrep -if 'nexus-network' || true);
+            else
+              pids="";
+            fi;
+            if [ -n "$pids" ]; then
+              ps -p $pids -o pid,ppid,command 2>/dev/null | sed '1d'
+            else
+              ps -axo pid,ppid,command 2>/dev/null | grep -i 'nexus-network' | grep -v grep || true
+            fi
+            """
+
+            ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
+                processes = output
+                    .components(separatedBy: .newlines)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }, onExit: { _ in
+                semaphore.signal()
+            })
+            semaphore.wait()
+            return processes
+        }
 
         if let pid = project.pid, pid > 0 {
+            var processes: [String] = []
             let semaphore = DispatchSemaphore(value: 0)
             let script = "ps -p \(pid) -o pid,ppid,command 2>/dev/null | sed '1d'"
 
@@ -228,17 +257,12 @@ final class Monitor {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
-        if project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "nexus" {
-            candidates.append("nexus-network")
-            candidates.append(".nexus/bin/nexus-network")
-            candidates.append("nexus-network start")
-            candidates.append("nexus.command")
-            candidates.append("nexus.sh")
-        }
-
         guard !candidates.isEmpty else {
             return []
         }
+
+        var all: [String] = []
+        var seen = Set<String>()
 
         for keyword in candidates {
             let semaphore = DispatchSemaphore(value: 0)
@@ -270,12 +294,16 @@ final class Monitor {
             semaphore.wait()
 
             if !current.isEmpty {
-                processes = current
-                break
+                for line in current {
+                    if !seen.contains(line) {
+                        seen.insert(line)
+                        all.append(line)
+                    }
+                }
             }
         }
 
-        return processes
+        return all
     }
 
     static func readRecentLogs(_ project: Project, tail: Int = 200) -> String {
@@ -357,7 +385,7 @@ final class Monitor {
         semaphore.wait()
         return isInUse
     }
-
+    
     private static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }

@@ -369,6 +369,11 @@ tmp_dmg="${PUBLISH_DIR%/}/$dmg_filename.part"
 cp -f "$dmg_path" "$tmp_dmg"
 mv -f "$tmp_dmg" "${PUBLISH_DIR%/}/$dmg_filename"
 
+fixed_dmg="${PUBLISH_DIR%/}/${APP_NAME}.dmg"
+tmp_fixed_dmg="${fixed_dmg}.part"
+cp -f "$dmg_path" "$tmp_fixed_dmg"
+mv -f "$tmp_fixed_dmg" "$fixed_dmg"
+
 python3 - "$version" "$url" "$current_hash" "$notes" "$released_at" >"${PUBLISH_DIR%/}/update.json.part" <<'PY'
 import json
 import sys
@@ -432,4 +437,5 @@ echo "OK"
 echo "INCOMING_DIR=${INCOMING_DIR}"
 echo "PUBLISH_DIR=${PUBLISH_DIR}"
 echo "URL=https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/*.zip"
+echo "DMG=https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/${APP_NAME}.dmg"
 echo "META=https://${DOMAIN}${PUBLIC_PATH_PREFIX%/}/update.json"
