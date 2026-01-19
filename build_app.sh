@@ -5,7 +5,7 @@
 # 配置
 APP_NAME="MacApp"
 BINARY_NAME="YourApp"
-VERSION="1.2.0"
+VERSION="1.2.1"
 BUNDLE_ID="com.yourapp.YourApp"
 
 # 清理旧构建产物

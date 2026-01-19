@@ -324,7 +324,7 @@ final class ProjectRunner {
                 let parts = firstProcess
                     .components(separatedBy: .whitespaces)
                     .filter { !$0.isEmpty }
-                if parts.count >= 2, let pid = Int(parts[1]) {
+                if let first = parts.first, let pid = Int(first) {
                     updateProjectPid(project: project, pid: pid)
                 }
             }

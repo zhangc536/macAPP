@@ -364,6 +364,11 @@ tmp_zip="${PUBLISH_DIR%/}/$filename.part"
 cp -f "$zip_path" "$tmp_zip"
 mv -f "$tmp_zip" "${PUBLISH_DIR%/}/$filename"
 
+dmg_filename="$(basename "$dmg_path")"
+tmp_dmg="${PUBLISH_DIR%/}/$dmg_filename.part"
+cp -f "$dmg_path" "$tmp_dmg"
+mv -f "$tmp_dmg" "${PUBLISH_DIR%/}/$dmg_filename"
+
 python3 - "$version" "$url" "$current_hash" "$notes" "$released_at" >"${PUBLISH_DIR%/}/update.json.part" <<'PY'
 import json
 import sys

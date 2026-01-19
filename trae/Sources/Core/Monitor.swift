@@ -230,6 +230,10 @@ final class Monitor {
 
         if project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "nexus" {
             candidates.append("nexus-network")
+            candidates.append(".nexus/bin/nexus-network")
+            candidates.append("nexus-network start")
+            candidates.append("nexus.command")
+            candidates.append("nexus.sh")
         }
 
         guard !candidates.isEmpty else {
