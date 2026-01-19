@@ -212,16 +212,7 @@ final class Monitor {
             var processes: [String] = []
             let semaphore = DispatchSemaphore(value: 0)
             let script = """
-            if command -v pgrep >/dev/null 2>&1; then
-              pids=$(pgrep -if 'nexus-network' || true);
-            else
-              pids="";
-            fi;
-            if [ -n "$pids" ]; then
-              ps -p $pids -o pid,ppid,command 2>/dev/null | sed '1d'
-            else
-              ps -axo pid,ppid,command 2>/dev/null | grep -i 'nexus-network' | grep -v grep || true
-            fi
+            ps -axo pid,ppid,command 2>/dev/null | grep -i 'nexus-network' | grep -v grep || true
             """
 
             ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
