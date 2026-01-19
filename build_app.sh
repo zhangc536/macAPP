@@ -5,7 +5,7 @@
 # 配置
 APP_NAME="MacApp"
 BINARY_NAME="YourApp"
-VERSION="1.2.4"
+VERSION="1.2.5"
 BUNDLE_ID="com.yourapp.YourApp"
 
 # 清理旧构建产物
@@ -54,7 +54,7 @@ cat > build/$APP_NAME.app/Contents/Helpers/Updater << EOF
 #!/bin/bash
 ZIP="\$1"
 APP_NAME="$APP_NAME.app"
-INSTALL_DIR="\$HOME/Applications"
+INSTALL_DIR="/Applications"
 TARGET="\$INSTALL_DIR/\$APP_NAME"
 BACKUP="\$INSTALL_DIR/\$APP_NAME.bak"
 

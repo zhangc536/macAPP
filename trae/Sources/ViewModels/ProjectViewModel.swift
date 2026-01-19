@@ -4,9 +4,22 @@ import SwiftUI
 class ProjectViewModel: ObservableObject {
     @Published var projects: [Project] = []
     @Published var logs: String = ""
+    private var statusTimer: Timer?
     
     init() {
         loadProjects()
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let currentProjects = self.projects
+            DispatchQueue.global(qos: .background).async {
+                currentProjects.forEach { project in
+                    self.checkProjectStatus(project)
+                }
+            }
+        }
+        if let timer = statusTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
     }
     
     func loadProjects() {
