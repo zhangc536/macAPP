@@ -207,8 +207,9 @@ final class Monitor {
         }
 
         let lowerType = project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let lowerId = project.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        if lowerType == "nexus" {
+        if lowerType == "nexus" || lowerId == "nexus" {
             var processes: [String] = []
             let semaphore = DispatchSemaphore(value: 0)
             let script = """
@@ -227,7 +228,7 @@ final class Monitor {
             return processes
         }
 
-        if lowerType == "dria" {
+        if lowerType == "dria" || lowerId == "dria" {
             var processes: [String] = []
             let semaphore = DispatchSemaphore(value: 0)
             let script = """

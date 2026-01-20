@@ -23,35 +23,41 @@ struct ProjectListView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedProjectId) {
-                ForEach(filteredProjects) { project in
-                    ProjectRow(project: project, statusText: displayStatus(project.status))
-                        .tag(project.id)
-                        .contextMenu {
-                            if project.status == "running" {
-                                Button("停止") {
-                                    viewModel.stopProject(project)
+                Section(footer:
+                    Text("状态每 2 秒自动刷新，如需立即刷新，可在左侧列表下拉手动刷新。")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                ) {
+                    ForEach(filteredProjects) { project in
+                        ProjectRow(project: project, statusText: displayStatus(project.status))
+                            .tag(project.id)
+                            .contextMenu {
+                                if project.status == "running" {
+                                    Button("停止") {
+                                        viewModel.stopProject(project)
+                                    }
+                                } else {
+                                    Button("启动") {
+                                        viewModel.startProject(project)
+                                    }
                                 }
-                            } else {
-                                Button("启动") {
-                                    viewModel.startProject(project)
+                                Button("部署") {
+                                    viewModel.deployProject(project)
+                                }
+                                Button("监控") {
+                                    selectedProjectForMonitor = project
+                                }
+                                if let launcherPath = project.launcherPath?.trimmingCharacters(in: .whitespacesAndNewlines), !launcherPath.isEmpty {
+                                    Button("打开启动文件") {
+                                        NSWorkspace.shared.open(URL(fileURLWithPath: launcherPath))
+                                    }
+                                }
+                                Divider()
+                                Button("编辑") {
+                                    onEdit(project)
                                 }
                             }
-                            Button("部署") {
-                                viewModel.deployProject(project)
-                            }
-                            Button("监控") {
-                                selectedProjectForMonitor = project
-                            }
-                            if let launcherPath = project.launcherPath?.trimmingCharacters(in: .whitespacesAndNewlines), !launcherPath.isEmpty {
-                                Button("打开启动文件") {
-                                    NSWorkspace.shared.open(URL(fileURLWithPath: launcherPath))
-                                }
-                            }
-                            Divider()
-                            Button("编辑") {
-                                onEdit(project)
-                            }
-                        }
+                    }
                 }
             }
             .searchable(text: $searchText, prompt: "搜索名称 / 类型 / 路径")

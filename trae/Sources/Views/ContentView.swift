@@ -290,6 +290,10 @@ private struct UpdatesView: View {
                     .foregroundColor(.secondary)
             }
 
+            Text("如需立即刷新更新信息，请点击下方“检查更新”按钮。")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+
             HStack(spacing: 12) {
                 Button("检查更新") {
                     onCheck()
@@ -467,6 +471,10 @@ private struct MonitorCenterView: View {
                     .pickerStyle(.menu)
                     .frame(maxWidth: 260)
                 }
+
+                Text("监控数据每 2 秒自动刷新，如需立即刷新，可返回“项目”页面下拉刷新或重新打开监控。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
 
                 Divider()
 
