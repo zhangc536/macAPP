@@ -227,6 +227,25 @@ final class Monitor {
             return processes
         }
 
+        if lowerType == "dria" {
+            var processes: [String] = []
+            let semaphore = DispatchSemaphore(value: 0)
+            let script = """
+            ps -axo pid,ppid,command 2>/dev/null | grep -E 'dkn-compute-launcher|dkn-compute-node_latest' | grep -v grep || true
+            """
+
+            ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
+                processes = output
+                    .components(separatedBy: .newlines)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }, onExit: { _ in
+                semaphore.signal()
+            })
+            semaphore.wait()
+            return processes
+        }
+
         if let pid = project.pid, pid > 0 {
             var processes: [String] = []
             let semaphore = DispatchSemaphore(value: 0)

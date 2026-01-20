@@ -13,5 +13,20 @@
     },
     "status": "stopped",
     "logPath": "app.log"
+  },
+  {
+    "id": "dria",
+    "name": "dria",
+    "type": "dria",
+    "scriptUrls": {
+      "deploy": "https://raw.githubusercontent.com/readyName/deploy_nodes/refs/heads/main/Dria/deploy_dria_for_mac.sh"
+    },
+    "needsSudo": {
+      "deploy": true,
+      "start": false,
+      "stop": false
+    },
+    "status": "stopped",
+    "logPath": "app.log"
   }
 ]
