@@ -5,7 +5,7 @@
 # 配置
 APP_NAME="MacApp"
 BINARY_NAME="YourApp"
-VERSION="1.2.6"
+VERSION="1.2.7"
 BUNDLE_ID="com.yourapp.YourApp"
 
 # 清理旧构建产物
@@ -53,10 +53,11 @@ mkdir -p build/$APP_NAME.app/Contents/Helpers
 cat > build/$APP_NAME.app/Contents/Helpers/Updater << EOF
 #!/bin/bash
 ZIP="\$1"
-APP_NAME="$APP_NAME.app"
-INSTALL_DIR="/Applications"
-TARGET="\$INSTALL_DIR/\$APP_NAME"
-BACKUP="\$INSTALL_DIR/\$APP_NAME.bak"
+SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+TARGET="\$(cd "\$SCRIPT_DIR/../.." && pwd)"
+INSTALL_DIR="\$(dirname "\$TARGET")"
+APP_NAME="\$(basename "\$TARGET")"
+BACKUP="\$TARGET.bak"
 
 sleep 2
 
