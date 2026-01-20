@@ -1,6 +1,8 @@
 import Foundation
 
 final class ProjectRunner {
+    private static var lastStatus: [String: String] = [:]
+    private static var pendingStoppedCounts: [String: Int] = [:]
     static func run(project: Project, action: String, onLog: @escaping (String) -> Void) {
         if action == "start" {
             let launcherPath = project.launcherPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -329,7 +331,21 @@ final class ProjectRunner {
                 }
             }
         }
-        
+
+        let previous = lastStatus[project.id] ?? "stopped"
+        if previous == "running" && status == "stopped" {
+            let count = (pendingStoppedCounts[project.id] ?? 0) + 1
+            pendingStoppedCounts[project.id] = count
+            if count < 3 {
+                status = "running"
+            } else {
+                pendingStoppedCounts[project.id] = 0
+            }
+        } else {
+            pendingStoppedCounts[project.id] = 0
+        }
+        lastStatus[project.id] = status
+
         onStatus(status)
         updateProjectStatus(project: project, status: status)
         semaphore.signal()
