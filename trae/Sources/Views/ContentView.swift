@@ -85,12 +85,14 @@ struct ContentView: View {
                                 Button("停止全部项目") {
                                     projectViewModel.runAllProjects(action: "stop")
                                 }
-                                Divider()
-                                Button("刷新") {
-                                    projectViewModel.loadProjects()
-                                }
                             } label: {
                                 Image(systemName: "bolt.horizontal")
+                            }
+
+                            Button {
+                                projectViewModel.loadProjects()
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
                             }
 
                             Button {
@@ -114,6 +116,18 @@ struct ContentView: View {
                 case .monitor:
                     MonitorCenterView(viewModel: projectViewModel)
                         .navigationTitle(SidebarItem.monitor.title)
+                        .toolbar {
+                            ToolbarItemGroup(placement: .primaryAction) {
+                                Button {
+                                    let projects = projectViewModel.projects
+                                    projects.forEach { project in
+                                        projectViewModel.checkProjectStatus(project)
+                                    }
+                                } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                            }
+                        }
                 case .updates:
                     UpdatesView(
                         isCheckingUpdate: isCheckingUpdate,
@@ -131,6 +145,19 @@ struct ContentView: View {
                         }
                     )
                     .navigationTitle(SidebarItem.updates.title)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .primaryAction) {
+                            Button {
+                                triggerUpdateCheck()
+                            } label: {
+                                if isCheckingUpdate {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .alert(isPresented: $showUpdateAlert) {
@@ -472,14 +499,15 @@ private struct MonitorCenterView: View {
                     .frame(maxWidth: 260)
                 }
 
-                Text("监控数据每 2 秒自动刷新，如需立即刷新，可返回“项目”页面下拉刷新或重新打开监控。")
+                Divider()
+
+                Text("监控每 2 秒自动刷新，如需立即刷新，可重新打开监控。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
 
-                Divider()
-
                 if let project = selectedProject {
                     ProjectMonitorView(project: project)
+                        .id(project.id)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Text("请选择要监控的项目")

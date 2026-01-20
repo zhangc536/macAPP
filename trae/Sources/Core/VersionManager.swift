@@ -175,10 +175,13 @@ final class VersionManager {
 
                         try launchUpdater(with: targetURL)
 
+                        let appURL = Bundle.main.bundleURL
                         DispatchQueue.main.async {
                             progress("安装完成，正在重启…")
-                            NSWorkspace.shared.open(Bundle.main.bundleURL)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 2.0) {
+                                _ = runProcess(executable: "/usr/bin/open", arguments: [appURL.path])
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                                 completion(.success(()))
                                 NSApplication.shared.terminate(nil)
                             }
@@ -242,10 +245,6 @@ final class VersionManager {
         process.executableURL = updaterURL
         process.arguments = [zipURL.path]
         try process.run()
-        process.waitUntilExit()
-        if process.terminationStatus != 0 {
-            throw InstallError(message: "更新程序执行失败（退出码 \(process.terminationStatus)）")
-        }
     }
 
     private static func runProcess(executable: String, arguments: [String]) -> (status: Int32, output: String) {
