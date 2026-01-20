@@ -5,7 +5,7 @@
 # 配置
 APP_NAME="MacApp"
 BINARY_NAME="YourApp"
-VERSION="1.2.9"
+VERSION="1.3.0"
 BUNDLE_ID="com.yourapp.YourApp"
 
 # 清理旧构建产物
@@ -69,8 +69,6 @@ if [ -d "\$TARGET" ]; then
 fi
 
 unzip -oq "\$ZIP" -d "\$INSTALL_DIR"
-
-open "\$TARGET"
 EOF
 chmod +x build/$APP_NAME.app/Contents/Helpers/Updater
 

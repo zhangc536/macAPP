@@ -170,6 +170,10 @@ private struct ProjectDetail: View {
                         .clipShape(Capsule())
                 }
 
+                Text("状态每 2 秒自动刷新，如需立即刷新，可在左侧列表下拉手动刷新。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+
                 VStack(alignment: .leading, spacing: 8) {
                     LabeledContent("类型", value: project.type)
                     LabeledContent("路径", value: project.path ?? "未配置")
