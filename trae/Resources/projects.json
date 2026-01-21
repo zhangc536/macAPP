@@ -35,5 +35,12 @@
     "type": "docker",
     "status": "stopped",
     "logPath": "app.log"
+  },
+  {
+    "id": "optimai_crawl4ai_0_7_3",
+    "name": "optimai",
+    "type": "docker",
+    "status": "stopped",
+    "logPath": "app.log"
   }
 ]
