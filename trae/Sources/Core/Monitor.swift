@@ -235,7 +235,11 @@ final class Monitor {
             semaphore.wait()
             let cleaned = processes.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             if cleaned.isEmpty {
-                return ["容器未运行或无进程信息"]
+                if isDockerContainerRunning(project) {
+                    return ["容器正在运行，但未返回进程信息（可能是镜像限制或权限问题）"]
+                } else {
+                    return ["容器未运行或无进程信息"]
+                }
             }
             if cleaned.count <= 1 {
                 return ["容器正在运行，但未返回进程列表"]
@@ -362,7 +366,7 @@ final class Monitor {
 
             var text = ""
             let semaphore = DispatchSemaphore(value: 0)
-            let script = "docker logs --tail \(tail) \(shellQuote(container)) 2>/dev/null"
+            let script = dockerCommand("logs --tail \(tail) \(shellQuote(container)) 2>/dev/null")
             ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
                 text += output
             }, onExit: { _ in
@@ -370,7 +374,14 @@ final class Monitor {
             })
             semaphore.wait()
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? "暂无日志或容器未运行" : trimmed
+            if trimmed.isEmpty {
+                if isDockerContainerRunning(project) {
+                    return "容器正在运行，但暂未输出日志（或日志未写到标准输出）"
+                } else {
+                    return "暂无日志或容器未运行"
+                }
+            }
+            return trimmed
         }
 
         guard let basePath = project.path, !basePath.isEmpty else {
