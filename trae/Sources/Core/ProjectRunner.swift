@@ -304,30 +304,27 @@ final class ProjectRunner {
     static func checkStatus(project: Project, onStatus: @escaping (String) -> Void) {
         let semaphore = DispatchSemaphore(value: 0)
         var status = "stopped"
+        let isDocker = project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "docker"
 
-        if project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "docker" {
+        if isDocker {
             if Monitor.isDockerContainerRunning(project) {
                 status = "running"
             }
-            onStatus(status)
-            updateProjectStatus(project: project, status: status)
-            semaphore.signal()
-            return
-        }
-        
-        let processes = Monitor.listRunningProcesses(project)
-        let runningLines = processes.filter { line in
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            return !trimmed.isEmpty
-        }
-        if !runningLines.isEmpty {
-            status = "running"
-            if let firstProcess = runningLines.first {
-                let parts = firstProcess
-                    .components(separatedBy: .whitespaces)
-                    .filter { !$0.isEmpty }
-                if let first = parts.first, let pid = Int(first) {
-                    updateProjectPid(project: project, pid: pid)
+        } else {
+            let processes = Monitor.listRunningProcesses(project)
+            let runningLines = processes.filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !trimmed.isEmpty
+            }
+            if !runningLines.isEmpty {
+                status = "running"
+                if let firstProcess = runningLines.first {
+                    let parts = firstProcess
+                        .components(separatedBy: .whitespaces)
+                        .filter { !$0.isEmpty }
+                    if let first = parts.first, let pid = Int(first) {
+                        updateProjectPid(project: project, pid: pid)
+                    }
                 }
             }
         }

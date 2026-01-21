@@ -149,7 +149,7 @@ final class Monitor {
     
     static func monitorProcess(_ project: Project, pid: Int? = nil) {
         if isDockerProject(project), let container = resolveDockerContainer(project) {
-            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Processes - \(project.name) ===; while true; do \(dockerCommand("stats --no-stream --format 'table {{.Name}}\\\\t{{.CPUPerc}}\\\\t{{.MemUsage}}' \(shellQuote(container)) 2>/dev/null || echo 容器未运行或不存在")); echo; \(dockerCommand("top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null || true")); sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
+            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Processes - \(project.name) ===; while true; do \(dockerCommand("stats --no-stream --format 'table {{.Name}}\\\\t{{.CPUPerc}}\\\\t{{.MemUsage}}' \(shellQuote(container)) 2>/dev/null || echo 容器未运行或不存在")); echo; \(dockerCommand("top \(shellQuote(container)) 2>/dev/null || true")); sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
             ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
             return
         }
@@ -166,7 +166,7 @@ final class Monitor {
     static func monitorProject(_ project: Project) {
         if isDockerProject(project), let container = resolveDockerContainer(project) {
             let actualPort = project.ports?.first ?? 0
-            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Comprehensive - \(project.name) ===; while true; do echo [$(date +%H:%M:%S)] Container: \(container); \(dockerCommand("inspect -f 'Status: {{.State.Status}}  Running: {{.State.Running}}  StartedAt: {{.State.StartedAt}}' \(shellQuote(container)) 2>/dev/null || echo 容器不存在")); echo; \(dockerCommand("stats --no-stream --format 'table {{.Name}}\\\\t{{.CPUPerc}}\\\\t{{.MemUsage}}\\\\t{{.NetIO}}\\\\t{{.BlockIO}}' \(shellQuote(container)) 2>/dev/null || true")); echo; echo Ports:; \(dockerCommand("port \(shellQuote(container)) 2>/dev/null || true")); echo; echo Host lsof :\(actualPort); lsof -i :\(actualPort) 2>/dev/null || echo Not listening; echo; echo Top:; \(dockerCommand("top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null || true")); echo; echo Logs (tail 50):; \(dockerCommand("logs --tail 50 \(shellQuote(container)) 2>/dev/null || true")); sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
+            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Comprehensive - \(project.name) ===; while true; do echo [$(date +%H:%M:%S)] Container: \(container); \(dockerCommand("inspect -f 'Status: {{.State.Status}}  Running: {{.State.Running}}  StartedAt: {{.State.StartedAt}}' \(shellQuote(container)) 2>/dev/null || echo 容器不存在")); echo; \(dockerCommand("stats --no-stream --format 'table {{.Name}}\\\\t{{.CPUPerc}}\\\\t{{.MemUsage}}\\\\t{{.NetIO}}\\\\t{{.BlockIO}}' \(shellQuote(container)) 2>/dev/null || true")); echo; echo Ports:; \(dockerCommand("port \(shellQuote(container)) 2>/dev/null || true")); echo; echo Host lsof :\(actualPort); lsof -i :\(actualPort) 2>/dev/null || echo Not listening; echo; echo Top:; \(dockerCommand("top \(shellQuote(container)) 2>/dev/null || true")); echo; echo Logs (tail 50):; \(dockerCommand("logs --tail 50 \(shellQuote(container)) 2>/dev/null || true")); sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
             ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
             return
         }
@@ -241,7 +241,7 @@ final class Monitor {
 
             var processes: [String] = []
             let semaphore = DispatchSemaphore(value: 0)
-            let script = dockerCommand("top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null")
+            let script = dockerCommand("top \(shellQuote(container)) 2>/dev/null")
             ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
                 let lines = output
                     .components(separatedBy: .newlines)
