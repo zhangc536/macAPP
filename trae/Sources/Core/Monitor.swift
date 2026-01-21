@@ -1,6 +1,8 @@
 import Foundation
 
 final class Monitor {
+    private static var dockerLastProcesses: [String: [String]] = [:]
+    private static var dockerEmptyCounts: [String: Int] = [:]
     private static func isDockerProject(_ project: Project) -> Bool {
         project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "docker"
     }
@@ -234,13 +236,28 @@ final class Monitor {
             })
             semaphore.wait()
             let cleaned = processes.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
             if cleaned.isEmpty {
-                if isDockerContainerRunning(project) {
+                let running = isDockerContainerRunning(project)
+                if running, let last = dockerLastProcesses[container] {
+                    let count = (dockerEmptyCounts[container] ?? 0) + 1
+                    dockerEmptyCounts[container] = count
+                    if count < 3 {
+                        return last
+                    }
+                }
+                if running {
                     return ["容器正在运行，但未返回进程信息（可能是镜像限制或权限问题）"]
                 } else {
+                    dockerLastProcesses[container] = []
+                    dockerEmptyCounts[container] = 0
                     return ["容器未运行或无进程信息"]
                 }
             }
+
+            dockerLastProcesses[container] = cleaned
+            dockerEmptyCounts[container] = 0
+
             if cleaned.count <= 1 {
                 return ["容器正在运行，但未返回进程列表"]
             }
