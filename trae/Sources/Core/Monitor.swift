@@ -275,7 +275,7 @@ final class Monitor {
         for key in unique {
             let quoted = shellQuote(key)
             let script = """
-            osascript -e 'on run argv' -e 'set proj to item 1 of argv' -e 'tell application "Terminal"' -e 'repeat with w in windows' -e 'repeat with t in tabs of w' -e 'try' -e 'set titleText to (name of t as text)' -e 'set lcTitle to (lowercase of titleText)' -e 'if lcTitle contains proj then close t' -e 'else' -e 'set c to contents of t' -e 'set lc to (lowercase of (c as text))' -e 'if lc contains proj then close t' -e 'end if' -e 'end if' -e 'end try' -e 'end repeat' -e 'end repeat' -e 'end tell' -e 'end run' \(quoted)
+            osascript -e 'on run argv' -e 'set proj to item 1 of argv' -e 'tell application "Terminal"' -e 'repeat with w in windows' -e 'try' -e 'set winTitle to (name of w as text)' -e 'set lcWin to (lowercase of winTitle)' -e 'if lcWin contains proj then close w' -e 'else' -e 'repeat with t in tabs of w' -e 'try' -e 'set c to contents of t' -e 'set lc to (lowercase of (c as text))' -e 'if lc contains proj then close t' -e 'end if' -e 'end try' -e 'end repeat' -e 'end if' -e 'end try' -e 'end repeat' -e 'end tell' -e 'end run' \(quoted)
             """
             ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
         }
