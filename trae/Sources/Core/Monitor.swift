@@ -259,15 +259,26 @@ final class Monitor {
     }
     
     static func closeTerminals(for project: Project) {
-        let name = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if name.isEmpty {
-            return
+        let name = project.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let id = project.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let type = project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var keywords = [name, id, type].filter { !$0.isEmpty }
+        if type == "nexus" || id == "nexus" || name == "nexus" {
+            keywords.append(contentsOf: ["nexus-network", "nexus provider"])
         }
-        let quoted = shellQuote(name)
-        let script = """
-        osascript -e 'on run argv' -e 'set proj to item 1 of argv' -e 'tell application "Terminal"' -e 'repeat with w in windows' -e 'repeat with t in tabs of w' -e 'try' -e 'set c to contents of t' -e 'if c contains proj then close t' -e 'end if' -e 'end try' -e 'end repeat' -e 'end repeat' -e 'end tell' -e 'end run' \(quoted)
-        """
-        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
+        if type == "dria" || id == "dria" || name == "dria" {
+            keywords.append(contentsOf: ["dkn-compute", "dkn-compute-node"])
+        }
+        let unique = Array(Set(keywords))
+        guard !unique.isEmpty else { return }
+
+        for key in unique {
+            let quoted = shellQuote(key)
+            let script = """
+            osascript -e 'on run argv' -e 'set proj to item 1 of argv' -e 'tell application "Terminal"' -e 'repeat with w in windows' -e 'repeat with t in tabs of w' -e 'try' -e 'set titleText to (name of t as text)' -e 'set lcTitle to (lowercase of titleText)' -e 'if lcTitle contains proj then close t' -e 'else' -e 'set c to contents of t' -e 'set lc to (lowercase of (c as text))' -e 'if lc contains proj then close t' -e 'end if' -e 'end if' -e 'end try' -e 'end repeat' -e 'end repeat' -e 'end tell' -e 'end run' \(quoted)
+            """
+            ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
+        }
     }
     
     static func closeAllTerminals() {
