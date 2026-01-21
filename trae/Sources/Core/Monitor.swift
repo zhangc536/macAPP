@@ -112,6 +112,36 @@ final class Monitor {
         return running
     }
 
+    static func stopDockerContainer(_ project: Project, onLog: @escaping (String) -> Void) -> Bool {
+        guard isDockerProject(project) else {
+            onLog("当前项目不是 Docker 类型")
+            return false
+        }
+        guard let container = resolveDockerContainer(project) else {
+            onLog("未找到 Docker 容器（尝试匹配项目 id / 名称失败）")
+            return true
+        }
+        let semaphore = DispatchSemaphore(value: 0)
+        var ok = false
+        let script = dockerCommand("stop \(shellQuote(container)) 2>/dev/null || true")
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
+            let text = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                onLog(text)
+            }
+        }, onExit: { status in
+            ok = (status == 0)
+            semaphore.signal()
+        })
+        semaphore.wait()
+        if ok {
+            onLog("已停止 Docker 容器：\(container)")
+        } else {
+            onLog("停止 Docker 容器失败：\(container)")
+        }
+        return ok
+    }
+
     static func openTerminalForProject(_ project: Project) {
         let basePath = project.path ?? ""
         let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "

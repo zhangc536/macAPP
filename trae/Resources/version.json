@@ -1,5 +1,5 @@
 {
-  "version": "1.4.1",
+  "version": "1.4.2",
   "url": "https://macapp.zhangcde.asia/downloads/update.json",
   "releaseNotes": "Initial release of YourApp.\n\nFeatures:\n- Docker, Python, and Node.js project management\n- Terminal-based monitoring\n- Admin/sudo support for system operations\n- DMG-based updates\n- User-friendly interface",
   "releasedAt": "2026-01-19T11:22:00Z"

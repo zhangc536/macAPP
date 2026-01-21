@@ -31,11 +31,20 @@ final class ProjectRunner {
             return
         }
 
-        if action == "stop",
-           project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "nexus",
-           project.scriptUrls?["stop"] == nil {
-            stopByKeyword(project: project, keyword: "nexus", onLog: onLog)
-            return
+        if action == "stop" {
+            let lowerType = project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if lowerType == "docker" {
+                let ok = Monitor.stopDockerContainer(project, onLog: onLog)
+                if ok {
+                    updateProjectStatus(project: project, status: "stopped")
+                }
+                return
+            }
+            if lowerType == "nexus",
+               project.scriptUrls?["stop"] == nil {
+                stopByKeyword(project: project, keyword: "nexus", onLog: onLog)
+                return
+            }
         }
 
         if let scriptUrl = project.scriptUrls?[action] {
