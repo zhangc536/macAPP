@@ -4,7 +4,7 @@
 
 # 配置
 APP_NAME="MacApp"
-VERSION="1.3.3"
+VERSION="1.3.4"
 DMG_NAME="MacApp"
 
 # 确保 create-dmg 已安装

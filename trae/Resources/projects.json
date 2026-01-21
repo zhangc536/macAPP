@@ -28,5 +28,12 @@
     },
     "status": "stopped",
     "logPath": "app.log"
+  },
+  {
+    "id": "tashi-depin-worker",
+    "name": "Tashi",
+    "type": "docker",
+    "status": "stopped",
+    "logPath": "app.log"
   }
 ]

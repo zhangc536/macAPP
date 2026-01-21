@@ -518,7 +518,9 @@ private struct MonitorCenterView: View {
                 }
             }
         }
-        .padding(20)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+        .padding(.top, 32)
         .frame(minWidth: 640, minHeight: 420)
         .onAppear {
             if selectedProjectId.isEmpty, let first = viewModel.projects.first {
