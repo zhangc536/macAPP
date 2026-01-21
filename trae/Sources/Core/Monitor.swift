@@ -258,6 +258,18 @@ final class Monitor {
         }
     }
     
+    static func closeTerminals(for project: Project) {
+        let name = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty {
+            return
+        }
+        let quoted = shellQuote(name)
+        let script = """
+        osascript -e 'on run argv' -e 'set proj to item 1 of argv' -e 'tell application "Terminal"' -e 'repeat with w in windows' -e 'repeat with t in tabs of w' -e 'try' -e 'set c to contents of t' -e 'if c contains proj then close t' -e 'end if' -e 'end try' -e 'end repeat' -e 'end repeat' -e 'end tell' -e 'end run' \(quoted)
+        """
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
+    }
+    
     static func closeAllTerminals() {
         let script = "osascript -e 'tell application \"Terminal\"' -e 'close every window' -e 'end tell'"
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })

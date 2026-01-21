@@ -60,7 +60,7 @@ class ProjectViewModel: ObservableObject {
                 self.addLog(log)
             }
         }
-        Monitor.closeAllTerminals()
+        Monitor.closeTerminals(for: project)
         DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 2.0) {
             self.checkProjectStatus(project)
         }

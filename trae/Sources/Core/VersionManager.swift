@@ -176,14 +176,23 @@ final class VersionManager {
                         try launchUpdater(with: targetURL)
 
                         let appURL = Bundle.main.bundleURL
+                        let pid = getpid()
                         DispatchQueue.main.async {
                             progress("安装完成，正在重启…")
-                            DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 2.0) {
-                                _ = runProcess(executable: "/usr/bin/open", arguments: [appURL.path])
+                            DispatchQueue.global(qos: .background).async {
+                                let script = """
+                                sleep 2;
+                                kill \(pid);
+                                sleep 1;
+                                open \(shQuote(appURL.path));
+                                """
+                                let process = Process()
+                                process.executableURL = URL(fileURLWithPath: "/bin/bash")
+                                process.arguments = ["-c", script]
+                                try? process.run()
                             }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                 completion(.success(()))
-                                NSApplication.shared.terminate(nil)
                             }
                         }
                     } catch {
