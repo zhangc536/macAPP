@@ -22,10 +22,24 @@ final class Monitor {
         ].filter { !$0.isEmpty }
     }
 
+    private static func dockerCommand(_ subcommand: String) -> String {
+        """
+        DOCKER_BIN=""
+        for candidate in docker /usr/local/bin/docker /opt/homebrew/bin/docker /usr/bin/docker; do
+          if command -v "$candidate" >/dev/null 2>&1; then
+            DOCKER_BIN="$candidate"
+            break
+          fi
+        done
+        [ -z "$DOCKER_BIN" ] && exit 0
+        "$DOCKER_BIN" \(subcommand)
+        """
+    }
+
     private static func resolveDockerContainer(_ project: Project) -> String? {
         var names: [String] = []
         let semaphore = DispatchSemaphore(value: 0)
-        let script = "command -v docker >/dev/null 2>&1 || exit 0; docker ps -a --format '{{.Names}}'"
+        let script = dockerCommand("ps -a --format '{{.Names}}'")
         ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
             names = output
                 .components(separatedBy: .newlines)
@@ -69,7 +83,7 @@ final class Monitor {
 
         var running = false
         let semaphore = DispatchSemaphore(value: 0)
-        let script = "docker inspect -f '{{.State.Running}}' \(shellQuote(container)) 2>/dev/null"
+        let script = dockerCommand("inspect -f '{{.State.Running}}' \(shellQuote(container)) 2>/dev/null")
         ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
             running = output.trimmingCharacters(in: .whitespacesAndNewlines) == "true"
         }, onExit: { _ in
@@ -88,7 +102,7 @@ final class Monitor {
     
     static func monitorLog(_ project: Project, logPath: String? = nil) {
         if isDockerProject(project), let container = resolveDockerContainer(project) {
-            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Logs - \(project.name) ===; docker logs -f --tail 200 \(shellQuote(container))\"' -e 'activate' -e 'end tell'"
+            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Logs - \(project.name) ===; \(dockerCommand("logs -f --tail 200 \(shellQuote(container))"))\"' -e 'activate' -e 'end tell'"
             ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
             return
         }
@@ -104,7 +118,7 @@ final class Monitor {
     static func monitorPort(_ project: Project, port: Int? = nil) {
         let actualPort = port ?? (project.ports?.first ?? 0)
         if isDockerProject(project), let container = resolveDockerContainer(project) {
-            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Port - \(project.name) ===; while true; do docker port \(shellQuote(container)) 2>/dev/null || echo 容器未运行或不存在; echo; echo Host lsof :\(actualPort); lsof -i :\(actualPort) 2>/dev/null || echo Not listening; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
+            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Port - \(project.name) ===; while true; do \(dockerCommand("port \(shellQuote(container)) 2>/dev/null || echo 容器未运行或不存在")); echo; echo Host lsof :\(actualPort); lsof -i :\(actualPort) 2>/dev/null || echo Not listening; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
             ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
             return
         }
@@ -116,7 +130,7 @@ final class Monitor {
     
     static func monitorProcess(_ project: Project, pid: Int? = nil) {
         if isDockerProject(project), let container = resolveDockerContainer(project) {
-            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Processes - \(project.name) ===; while true; do docker stats --no-stream --format 'table {{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}' \(shellQuote(container)) 2>/dev/null || echo 容器未运行或不存在; echo; docker top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null || true; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
+            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Processes - \(project.name) ===; while true; do \(dockerCommand("stats --no-stream --format 'table {{.Name}}\\\\t{{.CPUPerc}}\\\\t{{.MemUsage}}' \(shellQuote(container)) 2>/dev/null || echo 容器未运行或不存在")); echo; \(dockerCommand("top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null || true")); sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
             ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
             return
         }
@@ -133,7 +147,7 @@ final class Monitor {
     static func monitorProject(_ project: Project) {
         if isDockerProject(project), let container = resolveDockerContainer(project) {
             let actualPort = project.ports?.first ?? 0
-            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Comprehensive - \(project.name) ===; while true; do echo [$(date +%H:%M:%S)] Container: \(container); docker inspect -f 'Status: {{.State.Status}}  Running: {{.State.Running}}  StartedAt: {{.State.StartedAt}}' \(shellQuote(container)) 2>/dev/null || echo 容器不存在; echo; docker stats --no-stream --format 'table {{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}\\t{{.NetIO}}\\t{{.BlockIO}}' \(shellQuote(container)) 2>/dev/null || true; echo; echo Ports:; docker port \(shellQuote(container)) 2>/dev/null || true; echo; echo Host lsof :\(actualPort); lsof -i :\(actualPort) 2>/dev/null || echo Not listening; echo; echo Top:; docker top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null || true; echo; echo Logs (tail 50):; docker logs --tail 50 \(shellQuote(container)) 2>/dev/null || true; sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
+            let script = "osascript -e 'tell application \"Terminal\"' -e 'do script \"echo === Docker Comprehensive - \(project.name) ===; while true; do echo [$(date +%H:%M:%S)] Container: \(container); \(dockerCommand("inspect -f 'Status: {{.State.Status}}  Running: {{.State.Running}}  StartedAt: {{.State.StartedAt}}' \(shellQuote(container)) 2>/dev/null || echo 容器不存在")); echo; \(dockerCommand("stats --no-stream --format 'table {{.Name}}\\\\t{{.CPUPerc}}\\\\t{{.MemUsage}}\\\\t{{.NetIO}}\\\\t{{.BlockIO}}' \(shellQuote(container)) 2>/dev/null || true")); echo; echo Ports:; \(dockerCommand("port \(shellQuote(container)) 2>/dev/null || true")); echo; echo Host lsof :\(actualPort); lsof -i :\(actualPort) 2>/dev/null || echo Not listening; echo; echo Top:; \(dockerCommand("top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null || true")); echo; echo Logs (tail 50):; \(dockerCommand("logs --tail 50 \(shellQuote(container)) 2>/dev/null || true")); sleep 2; clear; done\"' -e 'activate' -e 'end tell'"
             ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
             return
         }
@@ -208,7 +222,7 @@ final class Monitor {
 
             var processes: [String] = []
             let semaphore = DispatchSemaphore(value: 0)
-            let script = "docker top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null"
+            let script = dockerCommand("top \(shellQuote(container)) -eo pid,ppid,cmd 2>/dev/null")
             ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
                 let lines = output
                     .components(separatedBy: .newlines)
