@@ -3,6 +3,7 @@ import Foundation
 final class Monitor {
     private static var dockerLastProcesses: [String: [String]] = [:]
     private static var dockerEmptyCounts: [String: Int] = [:]
+    private static var dockerContainerCache: [String: String] = [:]
     private static func isDockerProject(_ project: Project) -> Bool {
         project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "docker"
     }
@@ -54,28 +55,44 @@ final class Monitor {
 
         let candidates = dockerCandidateNames(project)
         let lowerNames = names.map { $0.lowercased() }
+        if let cached = dockerContainerCache[project.id] {
+            let lowerCached = cached.lowercased()
+            if let index = lowerNames.firstIndex(of: lowerCached) {
+                return names[index]
+            }
+            if names.isEmpty {
+                return cached
+            }
+        }
 
         for candidate in candidates {
             let lower = candidate.lowercased()
             if let index = lowerNames.firstIndex(of: lower) {
-                return names[index]
+                let found = names[index]
+                dockerContainerCache[project.id] = found
+                return found
             }
         }
 
         for candidate in candidates {
             let lower = candidate.lowercased()
             if let index = lowerNames.firstIndex(where: { $0.hasPrefix(lower) }) {
-                return names[index]
+                let found = names[index]
+                dockerContainerCache[project.id] = found
+                return found
             }
         }
 
         for candidate in candidates {
             let lower = candidate.lowercased()
             if let index = lowerNames.firstIndex(where: { $0.contains(lower) }) {
-                return names[index]
+                let found = names[index]
+                dockerContainerCache[project.id] = found
+                return found
             }
         }
 
+        dockerContainerCache[project.id] = nil
         return nil
     }
 
