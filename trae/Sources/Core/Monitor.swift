@@ -7,13 +7,18 @@ final class Monitor {
 
     private static func dockerCandidateNames(_ project: Project) -> [String] {
         let raw = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = project.id.trimmingCharacters(in: .whitespacesAndNewlines)
         let dashed = raw.replacingOccurrences(of: " ", with: "-")
         let underscored = raw.replacingOccurrences(of: " ", with: "_")
         return [
-            project.id,
+            id,
+            id.lowercased(),
             raw,
+            raw.lowercased(),
             dashed,
-            underscored
+            dashed.lowercased(),
+            underscored,
+            underscored.lowercased()
         ].filter { !$0.isEmpty }
     }
 
@@ -32,11 +37,29 @@ final class Monitor {
         semaphore.wait()
 
         let candidates = dockerCandidateNames(project)
+        let lowerNames = names.map { $0.lowercased() }
+
         for candidate in candidates {
-            if names.contains(candidate) {
-                return candidate
+            let lower = candidate.lowercased()
+            if let index = lowerNames.firstIndex(of: lower) {
+                return names[index]
             }
         }
+
+        for candidate in candidates {
+            let lower = candidate.lowercased()
+            if let index = lowerNames.firstIndex(where: { $0.hasPrefix(lower) }) {
+                return names[index]
+            }
+        }
+
+        for candidate in candidates {
+            let lower = candidate.lowercased()
+            if let index = lowerNames.firstIndex(where: { $0.contains(lower) }) {
+                return names[index]
+            }
+        }
+
         return nil
     }
 
