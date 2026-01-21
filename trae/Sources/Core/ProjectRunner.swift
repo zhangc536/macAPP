@@ -33,6 +33,7 @@ final class ProjectRunner {
 
         if action == "stop" {
             let lowerType = project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let lowerId = project.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             if lowerType == "docker" {
                 let ok = Monitor.stopDockerContainer(project, onLog: onLog)
                 if ok {
@@ -43,6 +44,11 @@ final class ProjectRunner {
             if lowerType == "nexus",
                project.scriptUrls?["stop"] == nil {
                 stopByKeyword(project: project, keyword: "nexus", onLog: onLog)
+                return
+            }
+            if (lowerType == "dria" || lowerId == "dria"),
+               project.scriptUrls?["stop"] == nil {
+                stopByKeyword(project: project, keyword: "dkn-compute", onLog: onLog)
                 return
             }
         }
