@@ -18,14 +18,22 @@ final class ProjectRunner {
                 onLog("未找到启动文件，已禁止通过 URL 启动。")
                 return
             }
-
+            
+            let before = Monitor.snapshotTerminalWindows()
             if openLauncher(path: actualLauncherPath, onLog: onLog) {
+                let after = Monitor.snapshotTerminalWindows()
+                let newIds = after.filter { !before.contains($0) }
+                Monitor.bindTerminalWindows(for: project, ids: newIds)
                 updateProjectStatus(project: project, status: "running")
                 return
             }
 
+            let beforeRetry = Monitor.snapshotTerminalWindows()
             if let recaptured = captureLauncherIfExists(project: project, onLog: onLog, logNotFound: true),
                openLauncher(path: recaptured, onLog: onLog) {
+                let afterRetry = Monitor.snapshotTerminalWindows()
+                let newIds = afterRetry.filter { !beforeRetry.contains($0) }
+                Monitor.bindTerminalWindows(for: project, ids: newIds)
                 updateProjectStatus(project: project, status: "running")
             }
             return

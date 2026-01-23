@@ -4,6 +4,7 @@ final class Monitor {
     private static var dockerLastProcesses: [String: [String]] = [:]
     private static var dockerEmptyCounts: [String: Int] = [:]
     private static var dockerContainerCache: [String: String] = [:]
+    private static var capturedTerminalWindows: [String: [Int]] = [:]
     private static func isDockerProject(_ project: Project) -> Bool {
         project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "docker"
     }
@@ -226,6 +227,35 @@ final class Monitor {
         ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
     }
     
+    static func snapshotTerminalWindows() -> [Int] {
+        var ids: [Int] = []
+        let semaphore = DispatchSemaphore(value: 0)
+        let script = "osascript -e 'tell application \"Terminal\" to get id of windows'"
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { output in
+            let text = output.replacingOccurrences(of: "\n", with: "").replacingOccurrences(of: " ", with: "")
+            let parts = text.split(separator: ",")
+            ids = parts.compactMap { Int($0) }
+        }, onExit: { _ in
+            semaphore.signal()
+        })
+        semaphore.wait()
+        return ids
+    }
+    
+    static func bindTerminalWindows(for project: Project, ids: [Int]) {
+        guard !ids.isEmpty else { return }
+        capturedTerminalWindows[project.id] = ids
+    }
+    
+    private static func closeTerminalWindows(withIds ids: [Int]) {
+        guard !ids.isEmpty else { return }
+        let idList = ids.map { String($0) }.joined(separator: ",")
+        let script = """
+        osascript -e 'tell application "Terminal"' -e 'repeat with w in windows' -e 'try' -e 'set wid to id of w' -e 'if {\(idList)} contains wid then close w' -e 'end if' -e 'end try' -e 'end repeat' -e 'end tell'
+        """
+        ShellRunner.run(command: script, workingDir: nil, onOutput: { _ in }, onExit: { _ in })
+    }
+    
     static func customMonitor(_ project: Project, command: String, title: String) {
         let basePath = project.path ?? ""
         let cdPart = basePath.isEmpty ? "" : "cd \(basePath); "
@@ -259,6 +289,11 @@ final class Monitor {
     }
     
     static func closeTerminals(for project: Project) {
+        if let ids = capturedTerminalWindows[project.id], !ids.isEmpty {
+            closeTerminalWindows(withIds: ids)
+            capturedTerminalWindows[project.id] = []
+            return
+        }
         let name = project.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let id = project.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let type = project.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
